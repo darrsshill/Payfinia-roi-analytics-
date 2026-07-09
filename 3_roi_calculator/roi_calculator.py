@@ -21,7 +21,10 @@ NAVY="#1F3864"; BLUE="#2E5496"; TEAL="#2EC4B6"; AMBER="#F4A259"; RED="#E76F51"; 
 st.markdown(f"""
 <style>
  h1,h2,h3 {{color:{NAVY};}}
- .stMetric {{background:#F4F7FC;border-radius:10px;padding:12px;}}
+ .stMetric, [data-testid="stMetric"] {{background:#F4F7FC;border-radius:10px;padding:12px;}}
+ [data-testid="stMetricValue"] {{color:{NAVY} !important;}}
+ [data-testid="stMetricLabel"] {{color:{GREY} !important;}}
+ [data-testid="stMetricDelta"] {{color:{GREY} !important;}}
  .note {{background:#F4F7FC;border-left:5px solid {BLUE};padding:10px 14px;border-radius:6px;color:{GREY};font-size:0.9rem;}}
  .tag-cited{{color:#1B7F4B;font-weight:700;}} .tag-partly{{color:#B8860B;font-weight:700;}} .tag-est{{color:#C0562B;font-weight:700;}}
 </style>""", unsafe_allow_html=True)

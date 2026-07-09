@@ -1,0 +1,18 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# Office & LibreOffice temp / lock files
+~$*
+.~lock.*#
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Streamlit
+.streamlit/secrets.toml

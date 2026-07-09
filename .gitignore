@@ -16,3 +16,7 @@ venv/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# editor / local settings
+.claude/
+.vscode/

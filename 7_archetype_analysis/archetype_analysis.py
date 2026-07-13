@@ -152,6 +152,44 @@ print("=" * 78)
 print(summary.to_string(index=False))
 
 # --------------------------------------------------------------------------
+# 6b. PROSPECT PRIORITY — score & rank EVERY bank by $ value
+#     Priority Score = estimated net annual benefit from migrating (base case).
+#     Highest $ = most important customer. (Add NAME to the FDIC pull to label
+#     each row with the actual bank in a production run.)
+# --------------------------------------------------------------------------
+df["est_net_benefit"] = df.asset_k.apply(lambda a: roi_for_asset(a, 1.0)[0])
+df["roi_pct"] = df.asset_k.apply(lambda a: roi_for_asset(a, 1.0)[1] * 100)
+ranked = df.sort_values("est_net_benefit", ascending=False).reset_index(drop=True)
+ranked.index += 1
+lead = pd.DataFrame({
+    "Priority rank": ranked.index,
+    "Archetype": ranked.archetype,
+    "Assets ($M)": (ranked.asset_k / 1000).round(1),
+    "Offices": ranked.offices,
+    "Est. net benefit / yr": ranked.est_net_benefit.map(lambda x: f"${x:,.0f}"),
+    "ROI": ranked.roi_pct.map(lambda x: f"{x:,.0f}%"),
+})
+lead.to_csv(os.path.join(OUT, "prospect_priority.csv"), index=False)
+print("\n" + "=" * 78)
+print("PROSPECT PRIORITY — top 10 most important customers (by $ value)")
+print("=" * 78)
+print(lead.head(10).to_string(index=False))
+
+# chart: top 15 prospects
+top = ranked.head(15)
+plt.figure(figsize=(9, 5))
+cl_color = {label_map[cl]: PALETTE[i % len(PALETTE)] for i, cl in enumerate(order)}
+plt.barh(range(len(top)), top.est_net_benefit, color=[cl_color[a] for a in top.archetype])
+plt.yticks(range(len(top)), [f"#{i+1} · ${a/1000:,.0f}M" for i, a in enumerate(top.asset_k)])
+plt.gca().invert_yaxis(); plt.xlabel("Estimated net annual benefit ($)")
+plt.title("Top 15 priority prospects (ranked by $ value)", color=NAVY, fontweight="bold")
+plt.grid(alpha=.2, axis="x")
+import matplotlib.patches as mp
+handles = [mp.Patch(color=cl_color[label_map[cl]], label=label_map[cl]) for cl in order]
+plt.legend(handles=handles, fontsize=7.5, frameon=False, loc="lower right")
+plt.tight_layout(); plt.savefig(os.path.join(OUT, "05_prospect_priority.png"), dpi=140); plt.close()
+
+# --------------------------------------------------------------------------
 # 7. CHARTS
 # --------------------------------------------------------------------------
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "axes.edgecolor": "#cccccc"})

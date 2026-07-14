@@ -1,22 +1,29 @@
-# OS / editor junk
+# ---- OS / editor ----
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+.claude/
 
-# Office & LibreOffice temp / lock files
+# ---- Office / LibreOffice temp & lock files ----
 ~$*
 .~lock.*#
 *.tmp
 
-# Python
+# ---- Python ----
 __pycache__/
 *.pyc
 .venv/
 venv/
 .ipynb_checkpoints/
 
-# Streamlit
-.streamlit/secrets.toml
+# ---- Node / Vite (web apps) ----
+node_modules/
+dist/
+build/
+vb_*/
+*.timestamp-*.mjs
+*.local
 
-# editor / local settings
-.claude/
-.vscode/
+# ---- Streamlit ----
+.streamlit/secrets.toml

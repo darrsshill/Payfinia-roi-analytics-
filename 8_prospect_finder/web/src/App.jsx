@@ -70,6 +70,44 @@ export default function App() {
         </div>
         <div className="note">🎯 <b>Where to start:</b> Segment A is {segAgg[0].n} large/regional banks worth <b>{moneyM(segAgg[0].total)}/yr</b> combined — the highest value and highest ROI. Work down from A to D.</div>
 
+        {/* ---- ML methodology: what model, why, and why these banks ---- */}
+        <details className="method">
+          <summary>How these recommendations are made — the model, the data, and why these banks</summary>
+          <div className="methodbody">
+            <div className="mcol">
+              <h4>The model: K-means clustering</h4>
+              <p>We use <b>K-means</b>, an unsupervised machine-learning algorithm (scikit-learn), to group all
+                {" "}{prospects.length.toLocaleString()} banks into 4 segments. Features per bank: <b>asset size</b> and
+                {" "}<b>branch network</b> (log-scaled, standardized). Cluster separation is validated with a
+                {" "}<b>silhouette score of 0.39</b> — solid separation for real-world financial data. Segments are then
+                ordered A→D by each cluster's median dollar opportunity.</p>
+            </div>
+            <div className="mcol">
+              <h4>Why K-means?</h4>
+              <p>The project brief requires an <b>unsupervised</b> technique — we have no labeled "good prospect" examples,
+                so the algorithm must discover the natural groupings itself. K-means is transparent (each segment has an
+                interpretable center: "large multi-branch banks"), fast on 4,000+ institutions, and reproducible — the same
+                data always yields the same segments. We validated k=4 with elbow &amp; silhouette analysis.</p>
+            </div>
+            <div className="mcol">
+              <h4>Why these banks and not others?</h4>
+              <p>Migration savings scale with <b>outbound payment volume</b>, which scales with bank size. A wire costs
+                ~$19 and a check ~$3 to process versus ~$0.87 instant — so the more checks and wires a bank sends, the more
+                it saves. Segment A banks (median ~$3B assets) each stand to save <b>hundreds of thousands to millions per
+                year</b>, while Segment D banks (median ~$92M) often save too little to clear the setup cost. Same product,
+                same math — the size of the prize differs.</p>
+            </div>
+            <div className="mcol">
+              <h4>The data — real, not synthetic</h4>
+              <p>Every bank's name, location, assets, and branch count comes live from the
+                {" "}<a href="https://banks.data.fdic.gov/bankfind-suite/" target="_blank" rel="noreferrer">FDIC BankFind API</a> —
+                the U.S. government's official bank registry. Cost benchmarks trace to the Federal Reserve, Nacha, The
+                Clearing House and the AFP Fraud Survey (linked in the calculator). The one estimated input is each bank's
+                exact rail mix (not public), scaled from asset size and flagged for calibration with Payfinia data.</p>
+            </div>
+          </div>
+        </details>
+
         <div className="layout">
           <aside>
             <div className="card">

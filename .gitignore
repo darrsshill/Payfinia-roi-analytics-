@@ -4,6 +4,7 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+.Rhistory
 
 # ---- Office / LibreOffice temp & lock files ----
 ~$*

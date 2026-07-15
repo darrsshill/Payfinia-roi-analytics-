@@ -109,6 +109,39 @@ export default function App() {
               <span>👋 New here? Let the <b>Savings Assistant</b> ask a few questions and fill this in.</span>
               <span className="arrow">💬 button, bottom-right →</span>
             </div>
+
+            <details className="method">
+              <summary>How the math works — read this once and every number below makes sense</summary>
+              <div className="methodbody">
+                <div className="mcol">
+                  <h4>1 · What each payment really costs you</h4>
+                  <p>Every rail has a fully-loaded cost per transaction, split into three layers: the <b>network fee</b>
+                    (published by the Fed/TCH — exact), the <b>provider fee</b> (what Payfinia charges), and <b>your own
+                    internal cost</b> (staff, failures, fraud, compliance). Defaults are public benchmarks; edit any of them
+                    on the Cost Assumptions tab.</p>
+                </div>
+                <div className="mcol">
+                  <h4>2 · How savings are computed</h4>
+                  <p>For each rail you send: <b>savings = (your cost − instant cost) × payments shifted</b>. We only count
+                    <b> outbound</b> payments (you can't control what others send you), and only the share you choose to
+                    shift. Net benefit subtracts your annual platform cost; ROI and payback compare against the one-time
+                    setup cost.</p>
+                </div>
+                <div className="mcol">
+                  <h4>3 · Where the numbers come from</h4>
+                  <p>Volumes, fees and fraud figures trace to the <a href="https://www.frbservices.org/resources/financial-services/fednow/volume-value-stats" target="_blank" rel="noreferrer">Federal Reserve</a>,{" "}
+                    <a href="https://www.nacha.org/content/ach-network-volume-and-value-statistics" target="_blank" rel="noreferrer">Nacha</a>,{" "}
+                    <a href="https://www.theclearinghouse.org/payment-systems/rtp" target="_blank" rel="noreferrer">The Clearing House</a> and the AFP Fraud Survey —
+                    every line on the Rail Data tab has a verify link. Anything not directly citable is labelled <b>Estimate</b>.</p>
+                </div>
+                <div className="mcol">
+                  <h4>4 · Trust check</h4>
+                  <p>The <b>Sanity check</b> card shows the total your inputs imply you spend on payments today — compare it
+                    with the ops line on your NCUA/FDIC call report. If it's in the ballpark, the estimate is grounded in
+                    your reality, not ours.</p>
+                </div>
+              </div>
+            </details>
             <div className="grid">
               <section className="card inputs">
                 <h2>1 · Your bank</h2>

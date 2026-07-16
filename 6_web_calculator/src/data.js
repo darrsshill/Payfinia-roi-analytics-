@@ -30,11 +30,13 @@ export const RAILS = ["Check", "Wire", "Same-Day ACH", "ACH", "Instant"];
 export const LEGACY = ["Check", "Wire", "Same-Day ACH", "ACH"];
 
 // Each rail's cost, grouped into 3 layers. failure cost = rate x cost_per_failure.
+// Provider fee applies ONLY to Instant — Payfinia charges for the instant product,
+// not for the FI's existing check / wire / ACH rails. So provider = 0 on legacy rails.
 export const DEFAULTS = {
-  "Check":        { network: 0.03,  provider: 0.05, processing: 2.00, failure_rate: 0.015, cost_per_failure: 8.00, fraud_loss: 0.40, fraud_prevention: 0.10, compliance: 0.03, reconciliation: 0.30, liquidity: 0.00 },
-  "Wire":         { network: 0.82,  provider: 0.50, processing: 12.00, failure_rate: 0.010, cost_per_failure: 25.00, fraud_loss: 2.00, fraud_prevention: 1.00, compliance: 2.00, reconciliation: 0.50, liquidity: 0.00 },
-  "Same-Day ACH": { network: 0.05,  provider: 0.05, processing: 0.80, failure_rate: 0.015, cost_per_failure: 6.00, fraud_loss: 0.15, fraud_prevention: 0.10, compliance: 0.05, reconciliation: 0.10, liquidity: 0.00 },
-  "ACH":          { network: 0.005, provider: 0.02, processing: 0.15, failure_rate: 0.015, cost_per_failure: 4.00, fraud_loss: 0.05, fraud_prevention: 0.05, compliance: 0.03, reconciliation: 0.05, liquidity: 0.00 },
+  "Check":        { network: 0.03,  provider: 0.00, processing: 2.00, failure_rate: 0.015, cost_per_failure: 8.00, fraud_loss: 0.40, fraud_prevention: 0.10, compliance: 0.03, reconciliation: 0.30, liquidity: 0.00 },
+  "Wire":         { network: 0.82,  provider: 0.00, processing: 12.00, failure_rate: 0.010, cost_per_failure: 25.00, fraud_loss: 2.00, fraud_prevention: 1.00, compliance: 2.00, reconciliation: 0.50, liquidity: 0.00 },
+  "Same-Day ACH": { network: 0.05,  provider: 0.00, processing: 0.80, failure_rate: 0.015, cost_per_failure: 6.00, fraud_loss: 0.15, fraud_prevention: 0.10, compliance: 0.05, reconciliation: 0.10, liquidity: 0.00 },
+  "ACH":          { network: 0.005, provider: 0.00, processing: 0.15, failure_rate: 0.015, cost_per_failure: 4.00, fraud_loss: 0.05, fraud_prevention: 0.05, compliance: 0.03, reconciliation: 0.05, liquidity: 0.00 },
   "Instant":      { network: 0.045, provider: 0.10, processing: 0.10, failure_rate: 0.005, cost_per_failure: 5.00, fraud_loss: 0.25, fraud_prevention: 0.15, compliance: 0.10, reconciliation: 0.05, liquidity: 0.05 },
 };
 
@@ -85,27 +87,27 @@ export const RAIL_FACTS = {
     ["Volume", "~3.0 billion commercial checks (Reserve Banks), down 5.4% YoY", "2024", "Federal Reserve Payments Study", U.FRPS],
     ["Consumer use", "7% of consumers paid by check (was 19% in 2020)", "2024", "Federal Reserve", U.FRPS],
     ["Fraud", "58% of organizations targeted — the most of any instrument", "2025", "AFP Payments Fraud Survey", U.AFP],
-    ["Fully-loaded cost", "~$3.03 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
+    ["Fully-loaded cost", "~$2.98 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
   ],
   "Wire": [
     ["Volume", "209.9 million Fedwire Funds transfers", "2024", "Fedwire Funds Service Annual Statistics", U.FEDWIRE],
     ["Value", "$1.133 quadrillion; average $5.4 million per transfer", "2024", "Fedwire Annual Statistics", U.FEDWIRE],
     ["Fee", "$0.97 gross (~$0.78 with small-volume discount)", "2026 schedule", "Federal Reserve fee schedule", U.FEDNOW_FEE],
     ["Fraud", "25% of organizations targeted; high value-at-risk", "2025", "AFP Payments Fraud Survey", U.AFP],
-    ["Fully-loaded cost", "~$19.07 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.FEDWIRE],
+    ["Fully-loaded cost", "~$18.57 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.FEDWIRE],
   ],
   "Same-Day ACH": [
     ["Volume", "1.4 billion payments", "2025", "Nacha", U.NACHA],
     ["Value", "$3.9 trillion", "2025", "Nacha", U.NACHA],
     ["Growth", "+16.7% volume / +21.4% value YoY", "2025", "Nacha", U.NACHA],
-    ["Fully-loaded cost", "~$1.39 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
+    ["Fully-loaded cost", "~$1.34 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
   ],
   "ACH": [
     ["Volume", "35.2 billion payments", "2025", "Nacha", U.NACHA],
     ["Value", "$93.1 trillion", "2025", "Nacha", U.NACHA],
     ["Growth", "+4.9% volume YoY", "2025", "Nacha", U.NACHA],
     ["Fraud", "ACH debit: 30% of organizations targeted", "2025", "AFP Payments Fraud Survey", U.AFP],
-    ["Fully-loaded cost", "~$0.42 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
+    ["Fully-loaded cost", "~$0.40 per transaction (model)", "2025 est.", "Estimate — Deliverable 1", U.NACHA],
   ],
   "Instant": [
     ["FedNow settled (2025)", "8.4 million payments (up from 1.5M in 2024); $853.4B; +460% YoY", "2025", "Federal Reserve — FedNow", U.FEDNOW],

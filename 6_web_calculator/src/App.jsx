@@ -5,6 +5,11 @@ import {
   GROUNDING_SRC, RAIL_FACTS, RAIL_COLOR, U, railTotal, layerTotals, runBottomUp, impliedTotalCost,
 } from "./data.js";
 import ChatAssistant from "./ChatAssistant.jsx";
+import Wizard from "./Wizard.jsx";
+import ClientResult from "./ClientResult.jsx";
+import Compare from "./Compare.jsx";
+import WhyMigrate from "./WhyMigrate.jsx";
+import { loadScenarios, makeScenario, addScenario, removeScenario } from "./scenarios.js";
 
 const money = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
 const money2 = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(x);
@@ -27,23 +32,63 @@ function StatusTag({ status }) {
 }
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+// ---- auto-save: persist inputs in the browser so a refresh never loses them ----
+const LS_KEY = "payfinia_calc_v1";
+function loadSaved() {
+  try { if (typeof window === "undefined" || !window.localStorage) return null; return JSON.parse(window.localStorage.getItem(LS_KEY)) || null; }
+  catch { return null; }
+}
+const defaultNet = () => { const o = {}; RAILS.forEach((r) => { o[r] = DEFAULTS[r].network; }); return o; };
+
 export default function App() {
-  const [tab, setTab] = useState("calc");
-  const [unit, setUnit] = useState("Annual");           // Annual | Monthly
-  const [presetName, setPresetName] = useState("Mid CFI (~$1B)");
+  const SAVED = loadSaved();
   const p0 = PRESETS["Mid CFI (~$1B)"];
-  const [vol, setVol] = useState({ Check: p0.Check, Wire: p0.Wire, "Same-Day ACH": p0["Same-Day ACH"], ACH: p0.ACH });  // ANNUAL, outbound
-  const [oneTime, setOneTime] = useState(p0.oneTime);
-  const [annual, setAnnual] = useState(p0.annual);
-  const [subst, setSubst] = useState({ ...SUBST_DEFAULT });
-  const [disc, setDisc] = useState(10);
-  const [horizon, setHorizon] = useState(5);
-  const [costs, setCosts] = useState(() => clone(DEFAULTS));
+  const [simple, setSimple] = useState(SAVED ? (SAVED.simple ?? true) : true);   // client view vs advanced analyst view
+  const [stage, setStage] = useState(SAVED ? (SAVED.stage || "result") : "wizard");  // wizard -> result
+  const [userName, setUserName] = useState(SAVED?.userName || "");
+  const [bankName, setBankName] = useState(SAVED?.bankName || "");
+  const [tab, setTab] = useState(SAVED?.tab || "calc");
+  const [unit, setUnit] = useState(SAVED?.unit || "Annual");           // Annual | Monthly
+  const [presetName, setPresetName] = useState(SAVED?.presetName || "Mid CFI (~$1B)");
+  const [vol, setVol] = useState(SAVED?.vol || { Check: p0.Check, Wire: p0.Wire, "Same-Day ACH": p0["Same-Day ACH"], ACH: p0.ACH });  // ANNUAL, outbound
+  const [oneTime, setOneTime] = useState(SAVED?.oneTime ?? p0.oneTime);
+  const [annual, setAnnual] = useState(SAVED?.annual ?? p0.annual);
+  const [subst, setSubst] = useState(SAVED?.subst || { ...SUBST_DEFAULT });
+  const [disc, setDisc] = useState(SAVED?.disc ?? 10);
+  const [horizon, setHorizon] = useState(SAVED?.horizon ?? 5);
+  const [costs, setCosts] = useState(() => SAVED?.costs || clone(DEFAULTS));
 
   // top-down state (Justin's example)
-  const [tdLabor, setTdLabor] = useState(10000000);
-  const [tdFraud, setTdFraud] = useState(500000);
-  const [tdCount, setTdCount] = useState({ Check: 1000000, Wire: 100000, "Same-Day ACH": 0, ACH: 40000000, Instant: 0 });
+  const [tdLabor, setTdLabor] = useState(SAVED?.tdLabor ?? 10000000);
+  const [tdFraud, setTdFraud] = useState(SAVED?.tdFraud ?? 500000);
+  const [tdCount, setTdCount] = useState(SAVED?.tdCount || { Check: 1000000, Wire: 100000, "Same-Day ACH": 0, ACH: 40000000, Instant: 0 });
+  const [tdNet, setTdNet] = useState(SAVED?.tdNet || defaultNet());
+
+  // auto-save everything to the browser on any change
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_KEY, JSON.stringify({
+        simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs,
+        tdLabor, tdFraud, tdCount, tdNet,
+      }));
+    } catch { /* storage unavailable — ignore */ }
+  }, [simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, tdLabor, tdFraud, tdCount, tdNet]);
+
+  function resetAll() {
+    if (typeof window !== "undefined" && !window.confirm("Reset all inputs to the default example? This clears your saved progress in this browser.")) return;
+    try { window.localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+    const p = PRESETS["Mid CFI (~$1B)"];
+    setPresetName("Mid CFI (~$1B)");
+    setVol({ Check: p.Check, Wire: p.Wire, "Same-Day ACH": p["Same-Day ACH"], ACH: p.ACH });
+    setOneTime(p.oneTime); setAnnual(p.annual);
+    setSubst({ ...SUBST_DEFAULT }); setDisc(10); setHorizon(5);
+    setCosts(clone(DEFAULTS)); setUnit("Annual");
+    setUserName(""); setBankName("");
+    setTdLabor(10000000); setTdFraud(500000);
+    setTdCount({ Check: 1000000, Wire: 100000, "Same-Day ACH": 0, ACH: 40000000, Instant: 0 });
+    setTdNet(defaultNet());
+    setTab("calc"); setSimple(true); setStage("wizard");
+  }
 
   const mult = unit === "Monthly" ? 12 : 1;                        // display->annual
   const disp = (r) => Math.round(vol[r] / mult);
@@ -56,6 +101,30 @@ export default function App() {
   }
   function applyFromAssistant({ vol: v, oneTime: ot, annual: an, subst: s }) {
     setVol(v); setOneTime(ot); setAnnual(an); setSubst(s); setPresetName("Custom (from assistant)"); setUnit("Annual"); setTab("calc");
+  }
+  function finishWizard({ vol: v, oneTime: ot, annual: an, subst: s, firstName, bank }) {
+    setVol(v); setOneTime(ot); setAnnual(an); setSubst(s); setPresetName("Custom (from assistant)"); setUnit("Annual");
+    if (firstName) setUserName(firstName); if (bank) setBankName(bank);
+    setSimple(true); setStage("result");
+  }
+  const setVolRail = (r, v) => setVol({ ...vol, [r]: v });
+  const mig = subst.Wire ?? 30;
+  const setMig = (v) => setSubst({ Check: v, Wire: v, "Same-Day ACH": v, ACH: 0 });
+
+  // ---- saved scenarios ("versions") ----
+  const [scenarios, setScenarios] = useState(() => loadScenarios());
+  function saveScenario(name) {
+    const r = runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon);
+    const sc = makeScenario(name, { bankName, mig, vol: clone(vol), costs: clone(costs), subst: clone(subst), oneTime, annual, disc, horizon, result: r });
+    setScenarios(addScenario(sc));
+    return sc;
+  }
+  function deleteScenario(id) { setScenarios(removeScenario(id)); }
+  function loadScenario(sc) {
+    setVol(clone(sc.vol)); setCosts(clone(sc.costs)); setSubst(clone(sc.subst));
+    setOneTime(sc.oneTime); setAnnual(sc.annual); setDisc(sc.disc); setHorizon(sc.horizon);
+    if (sc.bankName) setBankName(sc.bankName);
+    setSimple(false); setTab("calc");
   }
   const setComp = (rail, key, v) => { const c = clone(costs); c[rail][key] = v; setCosts(c); };
 
@@ -78,27 +147,54 @@ export default function App() {
       const c = tdCount[r];
       const labor = sumL > 0 ? tdLabor * (DEFAULTS[r].processing * c) / sumL : 0;
       const fraud = sumF > 0 ? tdFraud * (DEFAULTS[r].fraud_loss * c) / sumF : 0;
-      const network = DEFAULTS[r].network * c; totNet += network;
+      const network = tdNet[r] * c; totNet += network;
       const totalCost = labor + network + fraud;
       return { rail: r, count: c, labor, network, fraud, totalCost, perTxn: c > 0 ? totalCost / c : 0 };
     });
     return { rows, grand: tdLabor + totNet + tdFraud, totNet };
-  }, [tdLabor, tdFraud, tdCount]);
+  }, [tdLabor, tdFraud, tdCount, tdNet]);
 
+  // ---- default client experience: guided wizard -> clean result ----
+  if (simple && stage === "wizard") return <Wizard onComplete={finishWizard} onSkip={() => setSimple(false)} />;
+  if (simple) return (
+    <ClientResult
+      vol={vol} setVolRail={setVolRail} costs={costs} subst={subst} mig={mig} setMig={setMig}
+      oneTime={oneTime} annual={annual} disc={disc} horizon={horizon}
+      userName={userName} bankName={bankName}
+      scenarios={scenarios} onSaveScenario={saveScenario} onDeleteScenario={deleteScenario} onLoadScenario={loadScenario}
+      onAdvanced={() => setSimple(false)}
+      onRestart={() => setStage("wizard")}
+      onSources={() => { setSimple(false); setTab("data"); }}
+      onCompare={() => { setSimple(false); setTab("compare"); }}
+    />
+  );
+
+  // ---- advanced analyst view (the full toolkit) ----
   return (
     <div className="app">
       <header className="hero"><div className="wrap">
-        <div className="brand">PAYFINIA · MONEY MOVEMENT ANALYTICS</div>
+        <div className="herotop">
+          <div className="brand">PAYFINIA · MONEY MOVEMENT ANALYTICS</div>
+          <div className="herobtns">
+            <span className="savedtag">✓ Auto-saved</span>
+            <button className="guidedbtn accent" onClick={() => { setSimple(true); setStage("result"); }}>← Simple view</button>
+            <button className="guidedbtn" onClick={() => { setSimple(true); setStage("wizard"); }}>↺ Guided setup</button>
+            <button className="guidedbtn" onClick={resetAll}>Reset</button>
+          </div>
+        </div>
         <h1>Instant Payments ROI Calculator</h1>
-        <p>What your bank saves by moving the payments it <b>sends</b> (checks &amp; wires) to instant payments.
+        <p>{userName ? <>Welcome, <strong>{userName}</strong>{bankName ? <> — here's the picture for <strong>{bankName}</strong>.</> : "."} </> : null}
+          What your bank saves by moving the payments it <b>sends</b> (checks &amp; wires) to instant payments.
           <strong> Costs split into network · provider · your own — every figure sourced.</strong></p>
       </div></header>
 
       <nav className="tabs wrap">
-        <button className={tab === "calc" ? "on" : ""} onClick={() => setTab("calc")}>Savings Calculator</button>
-        <button className={tab === "td" ? "on" : ""} onClick={() => setTab("td")}>Use My Financials</button>
-        <button className={tab === "data" ? "on" : ""} onClick={() => setTab("data")}>Rail Data &amp; Sources</button>
         <button className={tab === "assum" ? "on" : ""} onClick={() => setTab("assum")}>Cost Assumptions</button>
+        <button className={tab === "td" ? "on" : ""} onClick={() => setTab("td")}>Use My Financials</button>
+        <button className={tab === "calc" ? "on" : ""} onClick={() => setTab("calc")}>Savings Calculator</button>
+        <button className={tab === "why" ? "on" : ""} onClick={() => setTab("why")}>Why Migrate</button>
+        <button className={tab === "compare" ? "on" : ""} onClick={() => setTab("compare")}>Compare Versions{scenarios.length ? ` (${scenarios.length})` : ""}</button>
+        <button className={tab === "data" ? "on" : ""} onClick={() => setTab("data")}>Rail Data &amp; Sources</button>
       </nav>
 
       <main className="wrap">
@@ -268,6 +364,13 @@ export default function App() {
                 <label className="fld" key={r}><span>{r === "ACH" ? "Standard ACH" : r}</span>
                   <NumberInput value={tdCount[r]} onChange={(v) => setTdCount({ ...tdCount, [r]: v })} /></label>
               ))}
+
+              <h2>Network fee per item ($) — enter your own</h2>
+              <p className="hint">Pre-filled with published rail fees (FedNow/RTP $0.045, Fedwire ~$0.78). Overwrite each with the exact fee your processor charges — these feed the calculation directly.</p>
+              {RAILS.map((r) => (
+                <label className="fld" key={r}><span>{r === "ACH" ? "Standard ACH" : r} network fee ($/item)</span>
+                  <input type="number" step="0.001" value={tdNet[r]} onChange={(e) => setTdNet({ ...tdNet, [r]: +e.target.value })} /></label>
+              ))}
               <p className="hint">Example pre-loaded from Payfinia's illustration ($10M labor, $500k fraud; 40M ACH, 100k wires, 1M checks).</p>
             </section>
             <section className="results">
@@ -313,6 +416,17 @@ export default function App() {
           </div>
         )}
 
+        {/* ============ WHY MIGRATE ============ */}
+        {tab === "why" && (
+          <div className="datawrap">
+            <p className="lead">The case for moving each rail to instant — pulled live from your cost assumptions, so it stays honest if you edit them. Standard ACH is intentionally flagged “keep,” because it's already cheaper than instant.</p>
+            <WhyMigrate costs={costs} />
+          </div>
+        )}
+
+        {/* ============ COMPARE VERSIONS ============ */}
+        {tab === "compare" && <Compare scenarios={scenarios} onLoad={loadScenario} onDelete={deleteScenario} />}
+
         {/* ============ COST ASSUMPTIONS (3 layers + mini-calcs) ============ */}
         {tab === "assum" && <Assumptions costs={costs} setComp={setComp} vol={vol} />}
       </main>
@@ -334,10 +448,18 @@ function Assumptions({ costs, setComp, vol }) {
   const [fte, setFte] = useState(2), [salary, setSalary] = useState(55000), [items, setItems] = useState(vol[rail] || 100000);
   const [failed, setFailed] = useState(1500), [perFail, setPerFail] = useState(8);
   const [fraudUsd, setFraudUsd] = useState(50000), [fItems, setFItems] = useState(vol[rail] || 100000);
+  const [fpUsd, setFpUsd] = useState(12000), [fpItems, setFpItems] = useState(vol[rail] || 100000);
+  const [amlUsd, setAmlUsd] = useState(15000), [amlItems, setAmlItems] = useState(vol[rail] || 100000);
+  const [recFte, setRecFte] = useState(1), [recSalary, setRecSalary] = useState(55000), [recItems, setRecItems] = useState(vol[rail] || 100000);
+  const [liqBal, setLiqBal] = useState(500000), [liqRate, setLiqRate] = useState(4), [liqItems, setLiqItems] = useState(vol[rail] || 100000);
 
   const procPer = items > 0 ? (fte * salary) / items : 0;
   const failRate = fItemsSafe(items) > 0 ? failed / items : 0;
   const fraudPer = fItems > 0 ? fraudUsd / fItems : 0;
+  const fpPer = fpItems > 0 ? fpUsd / fpItems : 0;
+  const amlPer = amlItems > 0 ? amlUsd / amlItems : 0;
+  const recPer = recItems > 0 ? (recFte * recSalary) / recItems : 0;
+  const liqPer = liqItems > 0 ? (liqBal * (liqRate / 100)) / liqItems : 0;
 
   const layers = layerTotals(c);
   return (
@@ -345,29 +467,33 @@ function Assumptions({ costs, setComp, vol }) {
       <p className="lead">Cost per transaction, split into <b>3 layers</b>: the <b style={{ color: L1 }}>network</b> charges, the <b style={{ color: L2 }}>provider (Payfinia)</b> charges, and your <b style={{ color: L3 }}>own internal</b> cost. Build the internal numbers from figures you actually have.</p>
 
       <div className="assumgrid">
-        <div className="card">
+        <div className="card assum-stack">
           <h3>Cost stack by layer — {rail}</h3>
           <label className="fld"><span>Choose a rail</span>
             <select value={rail} onChange={(e) => setRail(e.target.value)}>{RAILS.map((r) => <option key={r}>{r}</option>)}</select></label>
           <table className="tbl small">
             <thead><tr><th>Layer</th><th>Component</th><th>Value</th></tr></thead>
             <tbody>
-              {COMP_FIELDS.map((f) => (
+              {COMP_FIELDS.filter((f) => f.key !== "provider" || rail === "Instant").map((f) => (
                 <tr key={f.key}>
                   <td><span className="layerpill" style={{ background: (f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3) + "22", color: f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3 }}>{f.layer}</span></td>
                   <td>{f.label}</td>
-                  <td><input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
-                    onChange={(e) => setComp(rail, f.key, +e.target.value)} style={{ width: 80 }} /></td>
+                  <td><span className="valwrap">
+                    {f.kind === "$" && <span className="pfx">$</span>}
+                    <input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
+                      onChange={(e) => setComp(rail, f.key, +e.target.value)} style={{ width: 76 }} />
+                    {f.kind === "%" && <span className="sfx">rate</span>}
+                  </span></td>
                 </tr>
               ))}
               <tr><td colSpan="2" className="rl">Layer totals →</td>
                 <td className="tot">{money2(railTotal(c))}</td></tr>
             </tbody>
           </table>
-          <p className="fine"><b style={{ color: L1 }}>Network</b> {money2(layers.network)} · <b style={{ color: L2 }}>Provider</b> {money2(layers.provider)} · <b style={{ color: L3 }}>Internal</b> {money2(layers.internal)} = <b>{money2(railTotal(c))}</b>/txn</p>
+          <p className="fine"><b style={{ color: L1 }}>Network</b> {money2(layers.network)} · {rail === "Instant" && <><b style={{ color: L2 }}>Provider</b> {money2(layers.provider)} · </>}<b style={{ color: L3 }}>Internal</b> {money2(layers.internal)} = <b>{money2(railTotal(c))}</b>/txn</p>
         </div>
 
-        <div className="card">
+        <div className="card assum-builder">
           <h3>Cost Builder — build the internal cost from numbers you have</h3>
           <p className="fine">You probably can't say "$2.00 per check" off the top of your head — but you know these. Compute it, then apply.</p>
 
@@ -391,6 +517,36 @@ function Assumptions({ costs, setComp, vol }) {
             <div className="mc-row"><label>Total fraud $ on {rail} / yr</label><NumberInput value={fraudUsd} onChange={setFraudUsd} /></div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fItems} onChange={setFItems} /></div>
             <div className="mc-out">= <b>{money2(fraudPer)}</b> / item <button onClick={() => setComp(rail, "fraud_loss", +fraudPer.toFixed(3))}>Apply</button></div>
+          </div>
+
+          <div className="minicalc">
+            <b>Fraud prevention (screening &amp; tools)</b>
+            <div className="mc-row"><label>Fraud tools + staff ($/yr) on {rail}</label><NumberInput value={fpUsd} onChange={setFpUsd} /></div>
+            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fpItems} onChange={setFpItems} /></div>
+            <div className="mc-out">= <b>{money2(fpPer)}</b> / item <button onClick={() => setComp(rail, "fraud_prevention", +fpPer.toFixed(3))}>Apply</button></div>
+          </div>
+
+          <div className="minicalc">
+            <b>Compliance (AML / BSA)</b>
+            <div className="mc-row"><label>AML/BSA &amp; OFAC cost ($/yr) on {rail}</label><NumberInput value={amlUsd} onChange={setAmlUsd} /></div>
+            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={amlItems} onChange={setAmlItems} /></div>
+            <div className="mc-out">= <b>{money2(amlPer)}</b> / item <button onClick={() => setComp(rail, "compliance", +amlPer.toFixed(3))}>Apply</button></div>
+          </div>
+
+          <div className="minicalc">
+            <b>Reconciliation</b>
+            <div className="mc-row"><label>Recon staff (FTE) on {rail}</label><input type="number" value={recFte} onChange={(e) => setRecFte(+e.target.value)} /></div>
+            <div className="mc-row"><label>Avg loaded salary ($/yr)</label><NumberInput value={recSalary} onChange={setRecSalary} /></div>
+            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={recItems} onChange={setRecItems} /></div>
+            <div className="mc-out">= <b>{money2(recPer)}</b> / item <button onClick={() => setComp(rail, "reconciliation", +recPer.toFixed(3))}>Apply</button></div>
+          </div>
+
+          <div className="minicalc">
+            <b>Liquidity / prefunding</b>
+            <div className="mc-row"><label>Avg prefunded balance ($)</label><NumberInput value={liqBal} onChange={setLiqBal} /></div>
+            <div className="mc-row"><label>Cost of funds (% / yr)</label><input type="number" step="0.1" value={liqRate} onChange={(e) => setLiqRate(+e.target.value)} /></div>
+            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={liqItems} onChange={setLiqItems} /></div>
+            <div className="mc-out">= <b>{money2(liqPer)}</b> / item <button onClick={() => setComp(rail, "liquidity", +liqPer.toFixed(4))}>Apply</button></div>
           </div>
         </div>
       </div>

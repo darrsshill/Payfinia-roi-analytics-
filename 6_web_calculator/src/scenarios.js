@@ -32,7 +32,7 @@ export function makeScenario(name, snap) {
     bankName: snap.bankName || "",
     mig: snap.mig,
     // inputs (to reload)
-    vol: snap.vol, costs: snap.costs, subst: snap.subst,
+    vol: snap.vol, costs: snap.costs, subst: snap.subst, overrides: snap.overrides || {},
     oneTime: snap.oneTime, annual: snap.annual, disc: snap.disc, horizon: snap.horizon,
     // result (to display) — payback Infinity -> null so it survives JSON
     result: {

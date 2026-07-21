@@ -57,6 +57,7 @@ export default function App() {
   const [disc, setDisc] = useState(SAVED?.disc ?? 10);
   const [horizon, setHorizon] = useState(SAVED?.horizon ?? 5);
   const [costs, setCosts] = useState(() => SAVED?.costs || clone(DEFAULTS));
+  const [overrides, setOverrides] = useState(SAVED?.overrides || { Check: "", Wire: "", "Same-Day ACH": "", ACH: "", Instant: "" });
 
   // top-down state (Justin's example)
   const [tdLabor, setTdLabor] = useState(SAVED?.tdLabor ?? 10000000);
@@ -68,11 +69,11 @@ export default function App() {
   useEffect(() => {
     try {
       window.localStorage.setItem(LS_KEY, JSON.stringify({
-        simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs,
+        simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, overrides,
         tdLabor, tdFraud, tdCount, tdNet,
       }));
     } catch { /* storage unavailable — ignore */ }
-  }, [simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, tdLabor, tdFraud, tdCount, tdNet]);
+  }, [simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, overrides, tdLabor, tdFraud, tdCount, tdNet]);
 
   function resetAll() {
     if (typeof window !== "undefined" && !window.confirm("Reset all inputs to the default example? This clears your saved progress in this browser.")) return;
@@ -82,7 +83,7 @@ export default function App() {
     setVol({ Check: p.Check, Wire: p.Wire, "Same-Day ACH": p["Same-Day ACH"], ACH: p.ACH });
     setOneTime(p.oneTime); setAnnual(p.annual);
     setSubst({ ...SUBST_DEFAULT }); setDisc(10); setHorizon(5);
-    setCosts(clone(DEFAULTS)); setUnit("Annual");
+    setCosts(clone(DEFAULTS)); setOverrides({ Check: "", Wire: "", "Same-Day ACH": "", ACH: "", Instant: "" }); setUnit("Annual");
     setUserName(""); setBankName("");
     setTdLabor(10000000); setTdFraud(500000);
     setTdCount({ Check: 1000000, Wire: 100000, "Same-Day ACH": 0, ACH: 40000000, Instant: 0 });
@@ -114,22 +115,25 @@ export default function App() {
   // ---- saved scenarios ("versions") ----
   const [scenarios, setScenarios] = useState(() => loadScenarios());
   function saveScenario(name) {
-    const r = runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon);
-    const sc = makeScenario(name, { bankName, mig, vol: clone(vol), costs: clone(costs), subst: clone(subst), oneTime, annual, disc, horizon, result: r });
+    const r = runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides);
+    const sc = makeScenario(name, { bankName, mig, vol: clone(vol), costs: clone(costs), subst: clone(subst), overrides: clone(overrides), oneTime, annual, disc, horizon, result: r });
     setScenarios(addScenario(sc));
     return sc;
   }
   function deleteScenario(id) { setScenarios(removeScenario(id)); }
   function loadScenario(sc) {
     setVol(clone(sc.vol)); setCosts(clone(sc.costs)); setSubst(clone(sc.subst));
+    if (sc.overrides) setOverrides(clone(sc.overrides));
     setOneTime(sc.oneTime); setAnnual(sc.annual); setDisc(sc.disc); setHorizon(sc.horizon);
     if (sc.bankName) setBankName(sc.bankName);
     setSimple(false); setTab("calc");
   }
   const setComp = (rail, key, v) => { const c = clone(costs); c[rail][key] = v; setCosts(c); };
+  const setOverride = (rail, v) => setOverrides({ ...overrides, [rail]: v });
+  const applyToAll = (key, value) => { const c = clone(costs); RAILS.forEach((r) => { c[r][key] = value; }); setCosts(c); };
 
-  const res = useMemo(() => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon), [vol, costs, subst, oneTime, annual, disc, horizon]);
-  const implied = useMemo(() => impliedTotalCost(vol, costs), [vol, costs]);
+  const res = useMemo(() => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides), [vol, costs, subst, oneTime, annual, disc, horizon, overrides]);
+  const implied = useMemo(() => impliedTotalCost(vol, costs, overrides), [vol, costs, overrides]);
 
   const savings = res.rows.map((r) => ({ name: r.rail, value: Math.round(r.ann), color: RAIL_COLOR[r.rail] })).filter((d) => d.value > 0);
   const layerData = ["Wire", "Check", "Same-Day ACH", "Instant", "ACH"].map((r) => {
@@ -158,7 +162,7 @@ export default function App() {
   if (simple && stage === "wizard") return <Wizard onComplete={finishWizard} onSkip={() => setSimple(false)} />;
   if (simple) return (
     <ClientResult
-      vol={vol} setVolRail={setVolRail} costs={costs} subst={subst} mig={mig} setMig={setMig}
+      vol={vol} setVolRail={setVolRail} costs={costs} subst={subst} mig={mig} setMig={setMig} overrides={overrides}
       oneTime={oneTime} annual={annual} disc={disc} horizon={horizon}
       userName={userName} bankName={bankName}
       scenarios={scenarios} onSaveScenario={saveScenario} onDeleteScenario={deleteScenario} onLoadScenario={loadScenario}
@@ -428,7 +432,7 @@ export default function App() {
         {tab === "compare" && <Compare scenarios={scenarios} onLoad={loadScenario} onDelete={deleteScenario} />}
 
         {/* ============ COST ASSUMPTIONS (3 layers + mini-calcs) ============ */}
-        {tab === "assum" && <Assumptions costs={costs} setComp={setComp} vol={vol} />}
+        {tab === "assum" && <Assumptions costs={costs} setComp={setComp} vol={vol} overrides={overrides} setOverride={setOverride} applyToAll={applyToAll} />}
       </main>
 
       <footer className="wrap">
@@ -441,9 +445,10 @@ export default function App() {
 }
 
 // ---------- Cost Assumptions tab: 3-layer table + mini-calculators + sources ----------
-function Assumptions({ costs, setComp, vol }) {
+function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }) {
   const [rail, setRail] = useState("Check");
   const c = costs[rail];
+  const ovActive = overrides[rail] !== "" && !isNaN(+overrides[rail]);
   // mini-calc local inputs
   const [fte, setFte] = useState(2), [salary, setSalary] = useState(55000), [items, setItems] = useState(vol[rail] || 100000);
   const [failed, setFailed] = useState(1500), [perFail, setPerFail] = useState(8);
@@ -464,7 +469,16 @@ function Assumptions({ costs, setComp, vol }) {
   const layers = layerTotals(c);
   return (
     <div className="datawrap">
-      <p className="lead">Cost per transaction, split into <b>3 layers</b>: the <b style={{ color: L1 }}>network</b> charges, the <b style={{ color: L2 }}>provider (Payfinia)</b> charges, and your <b style={{ color: L3 }}>own internal</b> cost. Build the internal numbers from figures you actually have.</p>
+      <details className="method">
+        <summary>How to use this tab — read once</summary>
+        <div className="methodbody">
+          <div className="mcol"><h4>1 · Pick a rail</h4><p>Choose a payment type up top. Its cost per transaction shows split into <b>Network</b>, <b>Provider</b> (Instant only — Payfinia doesn't charge on your legacy rails) and your <b>Internal</b> cost.</p></div>
+          <div className="mcol"><h4>2 · Build from what you know</h4><p>Use the <b>Cost Builder</b> on the left to turn figures you have (staff × salary, fraud $, failed items) into a per-item cost, then hit <b>Apply</b>. All values are <b>$ per transaction</b> unless marked “rate.”</p></div>
+          <div className="mcol"><h4>3 · Apply to all rails</h4><p>The <b>⇊ all</b> button next to any value copies it to every rail at once — handy for a fee that's identical everywhere, so you don't retype it five times.</p></div>
+          <div className="mcol"><h4>4 · Or override the total</h4><p>If you already know your true all-in cost for a rail, type it into <b>Override total</b> at the bottom of the stack — the calculator uses that number and every result updates automatically.</p></div>
+        </div>
+      </details>
+      <p className="lead">Cost per transaction, split into <b>3 layers</b>: the <b style={{ color: L1 }}>network</b> charges, the <b style={{ color: L2 }}>provider (Payfinia, Instant only)</b> charge, and your <b style={{ color: L3 }}>own internal</b> cost. All values are <b>$ per transaction</b> unless marked “rate.” Build the internal numbers from figures you actually have — or override the total outright.</p>
 
       <div className="assumgrid">
         <div className="card assum-stack">
@@ -483,6 +497,7 @@ function Assumptions({ costs, setComp, vol }) {
                     <input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
                       onChange={(e) => setComp(rail, f.key, +e.target.value)} style={{ width: 76 }} />
                     {f.kind === "%" && <span className="sfx">rate</span>}
+                    <button className="applyall" title={`Apply this ${f.label} to all rails`} onClick={() => applyToAll(f.key, c[f.key])}>⇊ all</button>
                   </span></td>
                 </tr>
               ))}
@@ -491,6 +506,18 @@ function Assumptions({ costs, setComp, vol }) {
             </tbody>
           </table>
           <p className="fine"><b style={{ color: L1 }}>Network</b> {money2(layers.network)} · {rail === "Instant" && <><b style={{ color: L2 }}>Provider</b> {money2(layers.provider)} · </>}<b style={{ color: L3 }}>Internal</b> {money2(layers.internal)} = <b>{money2(railTotal(c))}</b>/txn</p>
+
+          <div className="overridebox">
+            <label className="fld" style={{ marginBottom: 6 }}>
+              <span>Override total $/txn for {rail} <em>(optional — use your own all-in number)</em></span>
+              <span className="valwrap"><span className="pfx">$</span>
+                <input type="number" step="0.01" value={overrides[rail]} placeholder={railTotal(c).toFixed(2)}
+                  onChange={(e) => setOverride(rail, e.target.value)} style={{ width: 110 }} /></span>
+            </label>
+            {ovActive
+              ? <p className="fine ovon">✓ Using your override of <b>{money2(+overrides[rail])}</b>/txn for {rail} — the stack above is ignored, and all results use this. <button type="button" className="linkbtn" onClick={() => setOverride(rail, "")}>Clear override</button></p>
+              : <p className="fine">Leave blank to use the built-up stack ({money2(railTotal(c))}/txn).</p>}
+          </div>
         </div>
 
         <div className="card assum-builder">

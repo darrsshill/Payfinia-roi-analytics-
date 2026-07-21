@@ -18,15 +18,15 @@ function CNum({ value, onChange }) {
 }
 
 export default function ClientResult({
-  vol, setVolRail, costs, subst, mig, setMig, oneTime, annual, disc, horizon,
+  vol, setVolRail, costs, subst, mig, setMig, overrides, oneTime, annual, disc, horizon,
   bankName, scenarios = [], onSaveScenario, onDeleteScenario, onLoadScenario,
   onAdvanced, onRestart, onSources, onCompare,
 }) {
   const [scName, setScName] = useState("");
   const [justSaved, setJustSaved] = useState(false);
   const res = useMemo(
-    () => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon),
-    [vol, costs, subst, oneTime, annual, disc, horizon]
+    () => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides),
+    [vol, costs, subst, oneTime, annual, disc, horizon, overrides]
   );
   const topSaver = [...res.rows].sort((a, b) => b.ann - a.ann)[0];
 

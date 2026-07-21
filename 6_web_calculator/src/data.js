@@ -37,7 +37,7 @@ export const DEFAULTS = {
   "Wire":         { network: 0.82,  provider: 0.00, processing: 12.00, failure_rate: 0.010, cost_per_failure: 25.00, fraud_loss: 2.00, fraud_prevention: 1.00, compliance: 2.00, reconciliation: 0.50, liquidity: 0.00 },
   "Same-Day ACH": { network: 0.05,  provider: 0.00, processing: 0.80, failure_rate: 0.015, cost_per_failure: 6.00, fraud_loss: 0.15, fraud_prevention: 0.10, compliance: 0.05, reconciliation: 0.10, liquidity: 0.00 },
   "ACH":          { network: 0.005, provider: 0.00, processing: 0.15, failure_rate: 0.015, cost_per_failure: 4.00, fraud_loss: 0.05, fraud_prevention: 0.05, compliance: 0.03, reconciliation: 0.05, liquidity: 0.00 },
-  "Instant":      { network: 0.045, provider: 0.10, processing: 0.10, failure_rate: 0.005, cost_per_failure: 5.00, fraud_loss: 0.25, fraud_prevention: 0.15, compliance: 0.10, reconciliation: 0.05, liquidity: 0.05 },
+  "Instant":      { network: 0.045, provider: 0.10, processing: 0.10, failure_rate: 0.005, cost_per_failure: 5.00, fraud_loss: 0.25, fraud_prevention: 0.15, compliance: 0.10, reconciliation: 0.05, liquidity: 0.00 },
 };
 
 // Editable component fields, tagged by layer.
@@ -115,7 +115,7 @@ export const RAIL_FACTS = {
     ["RTP volume (2025)", "~1.2 million payments/day; Q2: 107M txns / $481B", "2025", "The Clearing House", U.RTP],
     ["RTP participants", "1,031 institutions; 94% under $10B assets; 72%+ account reach", "Aug 2025", "The Clearing House", U.RTP_INST],
     ["Pricing", "$0.045 per credit transfer (both FedNow & RTP)", "2025–2026", "Fed / TCH fee schedules", U.FEDNOW_FEE],
-    ["Fully-loaded cost", "~$0.87 per transaction (incl. provider fee)", "2025 est.", "Estimate — Deliverable 1", U.FEDNOW],
+    ["Fully-loaded cost", "~$0.82 per transaction (incl. provider fee)", "2025 est.", "Estimate — Deliverable 1", U.FEDNOW],
   ],
 };
 export const RAIL_COLOR = { "Check": "#E76F51", "Wire": "#F4A259", "Same-Day ACH": "#2E5496", "ACH": "#9AA7C7", "Instant": "#2EC4B6" };
@@ -132,12 +132,19 @@ export const layerTotals = (c) => ({
             c.fraud_prevention + c.compliance + c.reconciliation + c.liquidity,
 });
 
-// volumes are ANNUAL, outbound. subst in %.
-export function runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon) {
-  const instant = railTotal(costs["Instant"]);
+// effective per-txn cost: a user override (typed all-in number) wins over the
+// bottom-up component stack. Empty / invalid override => use the stack.
+export const effTotal = (costs, ov, rail) => {
+  const o = ov && ov[rail];
+  return (o !== undefined && o !== null && o !== "" && !isNaN(+o)) ? +o : railTotal(costs[rail]);
+};
+
+// volumes are ANNUAL, outbound. subst in %. ov = optional per-rail total overrides.
+export function runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, ov) {
+  const instant = effTotal(costs, ov, "Instant");
   let gross = 0;
   const rows = LEGACY.map((rail) => {
-    const legacy = railTotal(costs[rail]);
+    const legacy = effTotal(costs, ov, rail);
     const per = legacy - instant;
     const migrated = vol[rail] * (subst[rail] / 100);
     const ann = migrated * per;
@@ -153,6 +160,6 @@ export function runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon) {
 }
 
 // implied total annual cost to support ALL current volume (the sanity check)
-export function impliedTotalCost(vol, costs) {
-  return LEGACY.reduce((s, rail) => s + vol[rail] * railTotal(costs[rail]), 0);
+export function impliedTotalCost(vol, costs, ov) {
+  return LEGACY.reduce((s, rail) => s + vol[rail] * effTotal(costs, ov, rail), 0);
 }

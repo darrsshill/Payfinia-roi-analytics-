@@ -172,6 +172,14 @@ main { padding:24px 0 12px; }
 .valwrap { display:inline-flex; align-items:center; gap:3px; }
 .valwrap .pfx { color:var(--muted); font-size:12px; font-weight:600; }
 .valwrap .sfx { color:var(--muted); font-size:11px; }
+.applyall { border:1px solid var(--line-2); background:#fff; color:var(--muted); font-size:10.5px; font-weight:600; padding:3px 7px; border-radius:6px; cursor:pointer; font-family:var(--sans); white-space:nowrap; }
+.applyall:hover { border-color:var(--accent); color:var(--accent-ink); background:var(--accent-soft); }
+
+/* per-rail total override */
+.overridebox { margin-top:14px; padding-top:14px; border-top:1px dashed var(--line-2); }
+.overridebox .fld > span em { color:var(--faint); font-style:normal; font-weight:400; }
+.ovon { color:var(--accent-ink) !important; background:var(--accent-soft); border:1px solid #bfe9e0; border-radius:8px; padding:8px 11px; }
+.linkbtn { background:none; border:none; color:var(--accent-ink); font-weight:700; font-size:12px; cursor:pointer; text-decoration:underline; font-family:var(--sans); padding:0; }
 
 /* ---- status + layer pills ---- */
 .tag, .layerpill { font-weight:700; font-size:10px; padding:2px 8px; border-radius:6px; white-space:nowrap; text-transform:uppercase; letter-spacing:.04em; }

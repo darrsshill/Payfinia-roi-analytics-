@@ -12,8 +12,7 @@
 | 1 · Public Data Synthesis | ✅ Complete | `1_data_synthesis/` (xlsx + docx) |
 | 2 · Migration ROI Model | ✅ Complete | `2_roi_model/` (Python + live Excel + 5 rail PDFs) |
 | 3 · CFI Archetype Analysis (ML) | ✅ Complete | `7_archetype_analysis/` + `8_prospect_finder/` |
-| 4 · Interactive ROI Calculator | ✅ Complete (v3) | `6_web_calculator/` (React) + `3_roi_calculator/` (Streamlit) |
-| Final readout deck | ✅ Complete | `5_presentation/` |
+| 4 · Interactive ROI Calculator | ✅ Complete (v3, wizard + compare + overrides) | `6_web_calculator/` (React) + `3_roi_calculator/` (Streamlit) |
 | Production-data calibration | ⏳ Pending (needs Payfinia data) | — |
 
 Overall: **all four brief deliverables built and functional.** Remaining work is calibration,

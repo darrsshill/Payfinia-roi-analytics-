@@ -10,13 +10,20 @@
 | Brief deliverable | Status | Artifact |
 |---|---|---|
 | 1 · Public Data Synthesis | ✅ Complete | `1_data_synthesis/` (xlsx + docx) |
-| 2 · Migration ROI Model | ✅ Complete | `2_roi_model/` (Python + live Excel + 5 rail PDFs) |
+| 2 · Migration ROI Model | ⚠️ Complete but **flat** — needs the v4 segment refactor | `2_roi_model/` (Python + live Excel + 5 rail PDFs) |
 | 3 · CFI Archetype Analysis (ML) | ✅ Complete | `7_archetype_analysis/` + `8_prospect_finder/` |
-| 4 · Interactive ROI Calculator | ✅ Complete (v3, wizard + compare + overrides) | `6_web_calculator/` (React) + `3_roi_calculator/` (Streamlit) |
+| 4 · Interactive ROI Calculator | ✅ **v4 — modular by customer segment** | `6_web_calculator/` (React) · `3_roi_calculator/` (Streamlit, still flat) |
+| Prospect Finder | 🅿️ **Shelved** by the client (2026-07-28) | `8_prospect_finder/` |
 | Production-data calibration | ⏳ Pending (needs Payfinia data) | — |
 
-Overall: **all four brief deliverables built and functional.** Remaining work is calibration,
-deployment, and refinements from client feedback — not net-new deliverables.
+Overall: **all four brief deliverables built and functional.** The React calculator has been
+refactored per the 2026-07-28 client review into Retail · Business · Internal modules costed
+independently and aggregated. Remaining work is calibration, propagating the segment refactor to the
+Python/Excel/Streamlit twins, and the deferred API-ingestion work.
+
+> **⚠️ Two open methodology flags** carried in `6_web_calculator/src/data.js` (`METHOD_FLAGS`) and
+> shown in-app. Both need resolving before the calculator goes in front of a client — see
+> `6_web_calculator/CHANGELOG_v4.md` §6.
 
 ---
 
@@ -76,10 +83,24 @@ README with quick-start and reproduce steps.
 - **Database** — persist customer inputs from the calculator (team: Hamza, on a branch).
 - **Deploy** the React calculator and prospect finder to Vercel for live shareable links.
 
-**From client feedback (Justin & Nizar) — partially open**
+**From the 2026-07-28 review (Keith Riddle, Nizar Jamal, Kiran Garimella)**
+
+Done in v4 — see `6_web_calculator/CHANGELOG_v4.md`:
+- ✅ Calculator split into **Retail · Business · Internal** modules, costed independently, aggregated.
+- ✅ **Persistent control panel** — no more clearing session tokens to fix a typo.
+- ✅ **FTE fraction-of-time** factored into the labor and reconciliation mini-calculators.
+- ✅ **Segment-based intake** — retail / SMB / mid-market counts drive the volume mix.
+- ✅ **Font size** increased app-wide, plus a text-size control.
+
+Still open:
+- **API-first ingestion (CSV/JSON)** so FDIC/NCUA data and sales conversations can auto-generate ROI
+  reports and outreach emails — Nizar's architecture ask, not yet built.
 - Pull default cost ranges directly from NCUA/FDIC **call-report** fields into the calculator.
 - Deepen the **origination / ACH-shrinking** logic (credit-push share that can go instant).
-- Additional mini-calculators (compliance time, reconciliation time).
+- **Propagate the segment refactor** to `2_roi_model/roi_model.py`, the Excel model, and the
+  Streamlit twin — they still carry the flat model and now disagree with the React app.
+- Resolve the two **high-severity methodology flags** (measurement-basis mismatch; retail wire
+  costing more than business wire).
 
 **Polish**
 - Apply the new premium UI to the Prospect Finder + Streamlit apps for consistency.

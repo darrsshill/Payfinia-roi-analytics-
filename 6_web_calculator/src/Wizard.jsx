@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PRESETS } from "./data.js";
+import { PRESETS, APPETITE, SEGMENTS, SEG_META, LEGACY, mixFromCustomers } from "./data.js";
 
 const num = (x) => new Intl.NumberFormat("en-US").format(Math.round(x || 0));
 
@@ -27,12 +27,20 @@ export default function Wizard({ onComplete, onSkip }) {
   const [ach] = useState(p.ACH);
   const [oneTime, setOneTime] = useState(p.oneTime);
   const [annual, setAnnual] = useState(p.annual);
-  const [mig, setMig] = useState(30);
+  const [appetite, setAppetite] = useState("Moderate");
+
+  // Keith Riddle, 2026-07-28: "improve the front-end data collection by asking
+  // for segmentation details like the number of retail users, SMBs, and
+  // mid-market customers served, rather than just raw check and wire counts."
+  const [cust, setCust] = useState({ ...p.customers });
 
   function pickSize(k) {
     setSizeKey(k); const pp = PRESETS[k];
     setChecks(pp.Check); setWires(pp.Wire); setOneTime(pp.oneTime); setAnnual(pp.annual);
+    if (pp.customers) setCust({ ...pp.customers });
   }
+
+  const mix = mixFromCustomers(cust);
 
   const steps = [
     {
@@ -85,18 +93,79 @@ export default function Wizard({ onComplete, onSkip }) {
       canNext: () => true,
     },
     {
+      key: "segments",
+      render: () => (
+        <>
+          <div className="wizkicker">Step 3 · Who you serve</div>
+          <h2>How is your customer base split?</h2>
+          <p className="wizsub">
+            A commercial wire costs far more to process than a consumer one — positive pay, callbacks, dual control. So we
+            cost <b>Retail</b>, <b>Business</b> and <b>Internal</b> payments separately rather than averaging them together.
+            Rough counts are fine.
+          </p>
+          <div className="wizthree">
+            <label>Retail members<WNum value={cust.retail} onChange={(v) => setCust({ ...cust, retail: v })} /></label>
+            <label>Small business<WNum value={cust.smb} onChange={(v) => setCust({ ...cust, smb: v })} /></label>
+            <label>Mid-market<WNum value={cust.midmarket} onChange={(v) => setCust({ ...cust, midmarket: v })} /></label>
+          </div>
+          <div className="wizmixpreview">
+            <div className="wizmixhead">Implied split of your outbound volume</div>
+            {LEGACY.map((rail) => (
+              <div className="wizmixrow" key={rail}>
+                <span className="wizmixrail">{rail}</span>
+                <div className="wizmixbar">
+                  {SEGMENTS.map((s) => {
+                    const pct = mix[rail]?.[s] || 0;
+                    if (pct <= 0) return null;
+                    return (
+                      <div key={s} style={{ width: pct + "%", background: SEG_META[s].color }}
+                        title={`${SEG_META[s].label} ${pct.toFixed(0)}%`}>
+                        {pct > 14 && <span>{pct.toFixed(0)}%</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="wizmixkey">
+              {SEGMENTS.map((s) => (
+                <span key={s}><i style={{ background: SEG_META[s].color }} />{SEG_META[s].label}</span>
+              ))}
+            </div>
+          </div>
+        </>
+      ),
+      canNext: () => true,
+    },
+    {
       key: "mig",
       render: () => (
         <>
-          <div className="wizkicker">Step 3 · The switch</div>
-          <h2>How much would you move to instant?</h2>
-          <p className="wizsub">A realistic starting point is around a quarter to a third. You can fine-tune this on the results screen.</p>
-          <div className="wizmig">
-            <div className="wizmigval">{mig}%</div>
-            <input type="range" min="0" max="100" value={mig} onChange={(e) => setMig(+e.target.value)} className="wizrange" />
-            <div className="wizmiglabels"><span>Keep as-is</span><span>Move most of it</span></div>
+          <div className="wizkicker">Step 4 · The switch</div>
+          <h2>How fast would you move?</h2>
+          <p className="wizsub">
+            Business volume migrates more slowly than retail at the same appetite — contract terms, AP file cycles and
+            supplier onboarding all slow it down. We apply a realistic rate to each segment rather than one blanket number.
+            Fine-tune any of it on the results screen.
+          </p>
+          <div className="wizappetite">
+            {Object.keys(APPETITE).map((a) => (
+              <button key={a} className={"sizebtn" + (appetite === a ? " on" : "")} onClick={() => setAppetite(a)}>
+                <b>{a}</b>
+                <span>
+                  Retail {APPETITE[a].Retail.Check}–{APPETITE[a].Retail.Wire}% · Business {APPETITE[a].Business.Check}–{APPETITE[a].Business.Wire}%
+                </span>
+              </button>
+            ))}
           </div>
-          <p className="wizsub" style={{ marginTop: 16 }}>You'd move <b>{mig}%</b> of your checks &amp; wires (≈ {num((checks + wires) * mig / 100)} payments) to instant.</p>
+          <p className="wizsub" style={{ marginTop: 16 }}>
+            At <b>{appetite}</b>, you'd move roughly <b>{num(
+              LEGACY.reduce((s, rail) => {
+                const v = rail === "Check" ? checks : rail === "Wire" ? wires : rail === "Same-Day ACH" ? sdach : ach;
+                return s + SEGMENTS.reduce((t, seg) => t + v * ((mix[rail]?.[seg] || 0) / 100) * (APPETITE[appetite][seg][rail] / 100), 0);
+              }, 0)
+            )}</b> payments a year to instant.
+          </p>
         </>
       ),
       canNext: () => true,
@@ -111,8 +180,10 @@ export default function Wizard({ onComplete, onSkip }) {
     onComplete({
       vol: { Check: checks, Wire: wires, "Same-Day ACH": sdach, ACH: ach },
       oneTime, annual,
-      subst: { Check: mig, Wire: mig, "Same-Day ACH": mig, ACH: 0 },
-      mig, firstName: first.trim(), bank: bank.trim(),
+      appetite,
+      customers: cust,
+      mix,
+      firstName: first.trim(), bank: bank.trim(),
     });
   }
 

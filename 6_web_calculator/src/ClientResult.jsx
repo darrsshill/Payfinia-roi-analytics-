@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, LabelList, Tooltip } from "recharts";
 import { RAIL_COLOR, runBottomUp, railTotal } from "./data.js";
 import WhyMigrate from "./WhyMigrate.jsx";
+import SegmentBreakdown from "./SegmentBreakdown.jsx";
 
 const money = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
 const money2 = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(x);
@@ -21,14 +22,20 @@ export default function ClientResult({
   vol, setVolRail, costs, subst, mig, setMig, overrides, oneTime, annual, disc, horizon,
   bankName, scenarios = [], onSaveScenario, onDeleteScenario, onLoadScenario,
   onAdvanced, onRestart, onSources, onCompare,
+  result, volBySeg, segCosts,
 }) {
   const [scName, setScName] = useState("");
   const [justSaved, setJustSaved] = useState(false);
-  const res = useMemo(
+
+  // v4: the segmented result is computed once in App and passed down. Falling
+  // back to a local recompute would use the flat single-segment path and
+  // silently disagree with the advanced view, so `result` wins when present.
+  const local = useMemo(
     () => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides),
     [vol, costs, subst, oneTime, annual, disc, horizon, overrides]
   );
-  const topSaver = [...res.rows].sort((a, b) => b.ann - a.ann)[0];
+  const res = result || local;
+  const topSaver = [...res.rows].sort((a, b) => b.ann - a.ann)[0] || { rail: "—", ann: 0 };
 
   function doSave() {
     onSaveScenario(scName);
@@ -101,6 +108,9 @@ export default function ClientResult({
         <section className="ccard">
           <h3>Why switch each payment type</h3>
           <p className="cfine" style={{ marginTop: 0, marginBottom: 4 }}>The honest case, rail by rail — including where it's <b>not</b> worth switching.</p>
+          {res.segments && volBySeg && (
+            <SegmentBreakdown result={res} segCosts={segCosts} volBySeg={volBySeg} />
+          )}
           <WhyMigrate costs={costs} />
         </section>
 

@@ -3,12 +3,17 @@ import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, LabelList, Tool
 import {
   RAILS, LEGACY, DEFAULTS, COMP_FIELDS, SUBST_DEFAULT, PRESETS, SRC, SUBST_SRC,
   GROUNDING_SRC, RAIL_FACTS, RAIL_COLOR, U, railTotal, layerTotals, runBottomUp, impliedTotalCost,
+  SEGMENTS, SEG_META, SEG_SOURCING, SEG_MIX_DEFAULT, DEFAULT_SEG_COSTS, APPETITE,
+  BUSINESS_BANDS, applyBusinessBand, METHOD_FLAGS, runSegmented, splitVolume,
+  impliedTotalCostSeg, mixFromCustomers, laborPerItem, perItem, LOADED_SALARY_MULT,
 } from "./data.js";
 import ChatAssistant from "./ChatAssistant.jsx";
 import Wizard from "./Wizard.jsx";
 import ClientResult from "./ClientResult.jsx";
 import Compare from "./Compare.jsx";
 import WhyMigrate from "./WhyMigrate.jsx";
+import ControlPanel from "./ControlPanel.jsx";
+import SegmentBreakdown from "./SegmentBreakdown.jsx";
 import { loadScenarios, makeScenario, addScenario, removeScenario } from "./scenarios.js";
 
 const money = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
@@ -33,12 +38,17 @@ function StatusTag({ status }) {
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
 // ---- auto-save: persist inputs in the browser so a refresh never loses them ----
-const LS_KEY = "payfinia_calc_v1";
+// v2 — schema changed when costs became segment-keyed. The old v1 payload is
+// incompatible, so we read from a new key and let v1 fall away cleanly rather
+// than half-loading it and crashing.
+const LS_KEY = "payfinia_calc_v2";
 function loadSaved() {
   try { if (typeof window === "undefined" || !window.localStorage) return null; return JSON.parse(window.localStorage.getItem(LS_KEY)) || null; }
   catch { return null; }
 }
 const defaultNet = () => { const o = {}; RAILS.forEach((r) => { o[r] = DEFAULTS[r].network; }); return o; };
+const emptyOv = () => ({ Check: "", Wire: "", "Same-Day ACH": "", ACH: "", Instant: "" });
+const emptyOvBySeg = () => { const o = {}; SEGMENTS.forEach((s) => { o[s] = emptyOv(); }); return o; };
 
 export default function App() {
   const SAVED = loadSaved();
@@ -53,11 +63,30 @@ export default function App() {
   const [vol, setVol] = useState(SAVED?.vol || { Check: p0.Check, Wire: p0.Wire, "Same-Day ACH": p0["Same-Day ACH"], ACH: p0.ACH });  // ANNUAL, outbound
   const [oneTime, setOneTime] = useState(SAVED?.oneTime ?? p0.oneTime);
   const [annual, setAnnual] = useState(SAVED?.annual ?? p0.annual);
-  const [subst, setSubst] = useState(SAVED?.subst || { ...SUBST_DEFAULT });
   const [disc, setDisc] = useState(SAVED?.disc ?? 10);
   const [horizon, setHorizon] = useState(SAVED?.horizon ?? 5);
-  const [costs, setCosts] = useState(() => SAVED?.costs || clone(DEFAULTS));
-  const [overrides, setOverrides] = useState(SAVED?.overrides || { Check: "", Wire: "", "Same-Day ACH": "", ACH: "", Instant: "" });
+
+  // ---- MODULAR SEGMENT STATE (Nizar Jamal, 2026-07-28) ----
+  // Retail · Business · Internal are each costed independently, then aggregated.
+  const [segCosts, setSegCosts] = useState(() => SAVED?.segCosts || clone(DEFAULT_SEG_COSTS));
+  const [mix, setMix] = useState(() => SAVED?.mix || clone(SEG_MIX_DEFAULT));
+  const [customers, setCustomers] = useState(() => SAVED?.customers || { ...p0.customers });
+  const [subst, setSubst] = useState(() => SAVED?.subst || clone(SUBST_DEFAULT));   // now subst[segment][rail]
+  const [appetite, setAppetite] = useState(SAVED?.appetite || "Moderate");
+  const [band, setBand] = useState(SAVED?.band || "AFP median (default)");
+  const [activeSegment, setActiveSegment] = useState(SAVED?.activeSegment || "Business");
+  const [overrides, setOverrides] = useState(() => SAVED?.overrides || emptyOvBySeg());
+  const [panelOpen, setPanelOpen] = useState(SAVED?.panelOpen ?? true);
+  const [flagsOpen, setFlagsOpen] = useState(false);
+  const [uiScale, setUiScale] = useState(SAVED?.uiScale ?? 1);
+
+  // Kiran Garimella: app-wide text size. Scales the whole shell proportionally.
+  useEffect(() => {
+    try { document.documentElement.style.setProperty("--ui-scale", String(uiScale)); } catch { /* ignore */ }
+  }, [uiScale]);
+
+  // the flat single-table view the older components still expect
+  const costs = segCosts[activeSegment];
 
   // top-down state (Justin's example)
   const [tdLabor, setTdLabor] = useState(SAVED?.tdLabor ?? 10000000);
@@ -69,11 +98,13 @@ export default function App() {
   useEffect(() => {
     try {
       window.localStorage.setItem(LS_KEY, JSON.stringify({
-        simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, overrides,
+        simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon,
+        segCosts, mix, customers, appetite, band, activeSegment, overrides, panelOpen, uiScale,
         tdLabor, tdFraud, tdCount, tdNet,
       }));
     } catch { /* storage unavailable — ignore */ }
-  }, [simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon, costs, overrides, tdLabor, tdFraud, tdCount, tdNet]);
+  }, [simple, stage, userName, bankName, tab, unit, presetName, vol, oneTime, annual, subst, disc, horizon,
+      segCosts, mix, customers, appetite, band, activeSegment, overrides, panelOpen, uiScale, tdLabor, tdFraud, tdCount, tdNet]);
 
   function resetAll() {
     if (typeof window !== "undefined" && !window.confirm("Reset all inputs to the default example? This clears your saved progress in this browser.")) return;
@@ -82,65 +113,154 @@ export default function App() {
     setPresetName("Mid CFI (~$1B)");
     setVol({ Check: p.Check, Wire: p.Wire, "Same-Day ACH": p["Same-Day ACH"], ACH: p.ACH });
     setOneTime(p.oneTime); setAnnual(p.annual);
-    setSubst({ ...SUBST_DEFAULT }); setDisc(10); setHorizon(5);
-    setCosts(clone(DEFAULTS)); setOverrides({ Check: "", Wire: "", "Same-Day ACH": "", ACH: "", Instant: "" }); setUnit("Annual");
+    setSubst(clone(SUBST_DEFAULT)); setDisc(10); setHorizon(5);
+    setSegCosts(clone(DEFAULT_SEG_COSTS)); setMix(clone(SEG_MIX_DEFAULT)); setCustomers({ ...p.customers });
+    setAppetite("Moderate"); setBand("AFP median (default)"); setActiveSegment("Business");
+    setOverrides(emptyOvBySeg()); setUnit("Annual");
     setUserName(""); setBankName("");
     setTdLabor(10000000); setTdFraud(500000);
     setTdCount({ Check: 1000000, Wire: 100000, "Same-Day ACH": 0, ACH: 40000000, Instant: 0 });
     setTdNet(defaultNet());
-    setTab("calc"); setSimple(true); setStage("wizard");
+    setTab("calc"); setSimple(true); setStage("wizard"); setPanelOpen(true);
   }
 
   const mult = unit === "Monthly" ? 12 : 1;                        // display->annual
-  const disp = (r) => Math.round(vol[r] / mult);
-  const setDisp = (r, v) => setVol({ ...vol, [r]: v * mult });
 
   function applyPreset(name) {
     setPresetName(name); const p = PRESETS[name];
+    if (!p) return;
     setVol({ Check: p.Check, Wire: p.Wire, "Same-Day ACH": p["Same-Day ACH"], ACH: p.ACH });
     setOneTime(p.oneTime); setAnnual(p.annual);
+    if (p.customers) setCustomers({ ...p.customers });
   }
   function applyFromAssistant({ vol: v, oneTime: ot, annual: an, subst: s }) {
-    setVol(v); setOneTime(ot); setAnnual(an); setSubst(s); setPresetName("Custom (from assistant)"); setUnit("Annual"); setTab("calc");
+    setVol(v); setOneTime(ot); setAnnual(an);
+    if (s) applyAppetiteFromFlat(s);
+    setPresetName("Custom (from assistant)"); setUnit("Annual"); setTab("calc");
   }
-  function finishWizard({ vol: v, oneTime: ot, annual: an, subst: s, firstName, bank }) {
-    setVol(v); setOneTime(ot); setAnnual(an); setSubst(s); setPresetName("Custom (from assistant)"); setUnit("Annual");
+  // The assistant and older callers hand back a FLAT {rail: %} map. Spread it
+  // across segments, preserving the per-segment readiness differential.
+  function applyAppetiteFromFlat(flat) {
+    const base = APPETITE[appetite] || SUBST_DEFAULT;
+    const next = {};
+    SEGMENTS.forEach((seg) => {
+      next[seg] = {};
+      LEGACY.forEach((rail) => {
+        const ref = base.Retail[rail] || 1;
+        const ratio = (base[seg][rail] || 0) / ref;
+        next[seg][rail] = Math.round((flat[rail] ?? 0) * ratio);
+      });
+    });
+    setSubst(next);
+  }
+  function finishWizard({ vol: v, oneTime: ot, annual: an, appetite: ap, customers: cu, mix: mx, firstName, bank }) {
+    if (v) setVol(v);
+    if (ot != null) setOneTime(ot);
+    if (an != null) setAnnual(an);
+    if (ap && APPETITE[ap]) { setAppetite(ap); setSubst(clone(APPETITE[ap])); }
+    if (cu) setCustomers(cu);
+    if (mx) setMix(mx);
+    setPresetName("Custom (from guided setup)"); setUnit("Annual");
     if (firstName) setUserName(firstName); if (bank) setBankName(bank);
     setSimple(true); setStage("result");
   }
   const setVolRail = (r, v) => setVol({ ...vol, [r]: v });
-  const mig = subst.Wire ?? 30;
-  const setMig = (v) => setSubst({ Check: v, Wire: v, "Same-Day ACH": v, ACH: 0 });
+
+  // ---- segment control helpers (wired into the persistent panel) ----
+  const setMixCell = (rail, seg, v) => setMix({ ...mix, [rail]: { ...mix[rail], [seg]: v } });
+  const resetMix = (next) => setMix(next);
+  const setSubstCell = (seg, rail, v) => setSubst({ ...subst, [seg]: { ...subst[seg], [rail]: v } });
+  function applyAppetite(name) {
+    setAppetite(name);
+    if (APPETITE[name]) setSubst(clone(APPETITE[name]));
+  }
+  function applyBand(name) {
+    setBand(name);
+    setSegCosts(name === "AFP median (default)"
+      ? clone(DEFAULT_SEG_COSTS)
+      : applyBusinessBand(clone(DEFAULT_SEG_COSTS), name));
+  }
+
+  // simple-view single migration dial, spread across segments
+  const mig = subst.Retail?.Wire ?? 35;
+  const setMig = (v) => {
+    const base = APPETITE[appetite] || SUBST_DEFAULT;
+    const next = {};
+    SEGMENTS.forEach((seg) => {
+      next[seg] = {};
+      LEGACY.forEach((rail) => {
+        const ratio = (base[seg][rail] || 0) / (base.Retail.Wire || 1);
+        next[seg][rail] = rail === "ACH" ? 0 : Math.round(v * ratio);
+      });
+    });
+    setSubst(next);
+  };
 
   // ---- saved scenarios ("versions") ----
   const [scenarios, setScenarios] = useState(() => loadScenarios());
+
+  // ---- the modular engine: split volume by segment, cost each independently ----
+  const volBySeg = useMemo(() => splitVolume(vol, mix), [vol, mix]);
+  const res = useMemo(
+    () => runSegmented(volBySeg, segCosts, subst, oneTime, annual, disc, horizon, overrides),
+    [volBySeg, segCosts, subst, oneTime, annual, disc, horizon, overrides]);
+  const implied = useMemo(() => impliedTotalCostSeg(volBySeg, segCosts, overrides), [volBySeg, segCosts, overrides]);
+
   function saveScenario(name) {
-    const r = runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides);
-    const sc = makeScenario(name, { bankName, mig, vol: clone(vol), costs: clone(costs), subst: clone(subst), overrides: clone(overrides), oneTime, annual, disc, horizon, result: r });
+    const sc = makeScenario(name, {
+      bankName, mig, vol: clone(vol), costs: clone(segCosts[activeSegment]), segCosts: clone(segCosts),
+      mix: clone(mix), customers: clone(customers), subst: clone(subst), overrides: clone(overrides),
+      appetite, band, oneTime, annual, disc, horizon, result: res,
+    });
     setScenarios(addScenario(sc));
     return sc;
   }
   function deleteScenario(id) { setScenarios(removeScenario(id)); }
   function loadScenario(sc) {
-    setVol(clone(sc.vol)); setCosts(clone(sc.costs)); setSubst(clone(sc.subst));
+    setVol(clone(sc.vol));
+    if (sc.segCosts) setSegCosts(clone(sc.segCosts));
+    if (sc.mix) setMix(clone(sc.mix));
+    if (sc.customers) setCustomers(clone(sc.customers));
+    if (sc.subst) setSubst(clone(sc.subst));
     if (sc.overrides) setOverrides(clone(sc.overrides));
+    if (sc.appetite) setAppetite(sc.appetite);
+    if (sc.band) setBand(sc.band);
     setOneTime(sc.oneTime); setAnnual(sc.annual); setDisc(sc.disc); setHorizon(sc.horizon);
     if (sc.bankName) setBankName(sc.bankName);
     setSimple(false); setTab("calc");
   }
-  const setComp = (rail, key, v) => { const c = clone(costs); c[rail][key] = v; setCosts(c); };
-  const setOverride = (rail, v) => setOverrides({ ...overrides, [rail]: v });
-  const applyToAll = (key, value) => { const c = clone(costs); RAILS.forEach((r) => { c[r][key] = value; }); setCosts(c); };
 
-  const res = useMemo(() => runBottomUp(vol, costs, subst, oneTime, annual, disc, horizon, overrides), [vol, costs, subst, oneTime, annual, disc, horizon, overrides]);
-  const implied = useMemo(() => impliedTotalCost(vol, costs, overrides), [vol, costs, overrides]);
+  // component edits are scoped to ONE segment — that is the whole point of the refactor
+  const setComp = (seg, rail, key, v) => {
+    const c = clone(segCosts); c[seg][rail][key] = v; setSegCosts(c); setBand("Custom");
+  };
+  const setOverride = (seg, rail, v) => setOverrides({ ...overrides, [seg]: { ...overrides[seg], [rail]: v } });
+  const applyToAllRails = (seg, key, value) => {
+    const c = clone(segCosts); RAILS.forEach((r) => { c[seg][r][key] = value; }); setSegCosts(c); setBand("Custom");
+  };
+  const applyToAllSegments = (rail, key, value) => {
+    const c = clone(segCosts); SEGMENTS.forEach((s) => { c[s][rail][key] = value; }); setSegCosts(c); setBand("Custom");
+  };
 
   const savings = res.rows.map((r) => ({ name: r.rail, value: Math.round(r.ann), color: RAIL_COLOR[r.rail] })).filter((d) => d.value > 0);
   const layerData = ["Wire", "Check", "Same-Day ACH", "Instant", "ACH"].map((r) => {
-    const lt = layerTotals(costs[r]);
+    const lt = layerTotals(segCosts[activeSegment][r]);
     return { name: r, Network: +lt.network.toFixed(3), Provider: +lt.provider.toFixed(3), Internal: +lt.internal.toFixed(3) };
   });
-  const topSaver = [...res.rows].sort((a, b) => b.ann - a.ann)[0];
+  const topSaver = [...res.rows].sort((a, b) => b.ann - a.ann)[0] || { rail: "—", ann: 0 };
+
+  // props shared by the persistent panel in both views
+  const panelProps = {
+    open: panelOpen, onToggle: () => setPanelOpen(!panelOpen),
+    bankName, setBankName, userName, setUserName,
+    presetName, applyPreset, unit, setUnit, vol, setVolRail,
+    customers, setCustomers, mix, setMixCell, resetMix,
+    appetite, applyAppetite, subst, setSubstCell,
+    oneTime, setOneTime, annual, setAnnual, disc, setDisc, horizon, setHorizon,
+    onRestartWizard: () => { setSimple(true); setStage("wizard"); },
+    onReset: resetAll,
+    activeSegment, setActiveSegment,
+  };
 
   // top-down compute
   const td = useMemo(() => {
@@ -161,26 +281,43 @@ export default function App() {
   // ---- default client experience: guided wizard -> clean result ----
   if (simple && stage === "wizard") return <Wizard onComplete={finishWizard} onSkip={() => setSimple(false)} />;
   if (simple) return (
-    <ClientResult
-      vol={vol} setVolRail={setVolRail} costs={costs} subst={subst} mig={mig} setMig={setMig} overrides={overrides}
-      oneTime={oneTime} annual={annual} disc={disc} horizon={horizon}
-      userName={userName} bankName={bankName}
-      scenarios={scenarios} onSaveScenario={saveScenario} onDeleteScenario={deleteScenario} onLoadScenario={loadScenario}
-      onAdvanced={() => setSimple(false)}
-      onRestart={() => setStage("wizard")}
-      onSources={() => { setSimple(false); setTab("data"); }}
-      onCompare={() => { setSimple(false); setTab("compare"); }}
-    />
+    // The control panel is mounted alongside the client result so a mistyped
+    // input is never a dead end (Nizar Jamal, 2026-07-28).
+    <div className={"shell" + (panelOpen ? " withpanel" : "")}>
+      <ControlPanel {...panelProps} />
+      <div className="shellmain">
+        <ClientResult
+          vol={vol} setVolRail={setVolRail} costs={segCosts.Retail} subst={subst} mig={mig} setMig={setMig}
+          overrides={overrides.Retail} result={res} volBySeg={volBySeg} segCosts={segCosts}
+          oneTime={oneTime} annual={annual} disc={disc} horizon={horizon}
+          userName={userName} bankName={bankName}
+          scenarios={scenarios} onSaveScenario={saveScenario} onDeleteScenario={deleteScenario} onLoadScenario={loadScenario}
+          onAdvanced={() => setSimple(false)}
+          onRestart={() => setStage("wizard")}
+          onSources={() => { setSimple(false); setTab("data"); }}
+          onCompare={() => { setSimple(false); setTab("compare"); }}
+        />
+      </div>
+    </div>
   );
 
   // ---- advanced analyst view (the full toolkit) ----
   return (
-    <div className="app">
+    <div className={"shell" + (panelOpen ? " withpanel" : "")}>
+    <ControlPanel {...panelProps} />
+    <div className="app shellmain">
       <header className="hero"><div className="wrap">
         <div className="herotop">
           <div className="brand">PAYFINIA · MONEY MOVEMENT ANALYTICS</div>
           <div className="herobtns">
             <span className="savedtag">✓ Auto-saved</span>
+            {/* Kiran Garimella, 2026-07-28: increase the font size in the app.
+                Default is already larger; this lets a reader push it further. */}
+            <span className="textsize" title="Text size">
+              <button className="ts-sm" onClick={() => setUiScale(1)} aria-label="Small text">A</button>
+              <button className="ts-md" onClick={() => setUiScale(1.1)} aria-label="Medium text">A</button>
+              <button className="ts-lg" onClick={() => setUiScale(1.22)} aria-label="Large text">A</button>
+            </span>
             <button className="guidedbtn accent" onClick={() => { setSimple(true); setStage("result"); }}>← Simple view</button>
             <button className="guidedbtn" onClick={() => { setSimple(true); setStage("wizard"); }}>↺ Guided setup</button>
             <button className="guidedbtn" onClick={resetAll}>Reset</button>
@@ -242,46 +379,9 @@ export default function App() {
                 </div>
               </div>
             </details>
-            <div className="grid">
-              <section className="card inputs">
-                <h2>1 · Your bank</h2>
-                <label className="fld"><span>Start from an example</span>
-                  <select value={presetName} onChange={(e) => applyPreset(e.target.value)}>
-                    {Object.keys(PRESETS).map((k) => <option key={k}>{k}</option>)}
-                    {presetName === "Custom (from assistant)" && <option>Custom (from assistant)</option>}
-                  </select></label>
+            <MethodFlags open={flagsOpen} setOpen={setFlagsOpen} />
 
-                <div className="unitrow">
-                  <span>Enter volumes as:</span>
-                  <div className="toggle small">
-                    {["Annual", "Monthly"].map((u) => <button key={u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>{u}</button>)}
-                  </div>
-                </div>
-                {["Check", "Wire", "Same-Day ACH", "ACH"].map((r) => (
-                  <label className="fld" key={r}>
-                    <span>{r === "ACH" ? "Standard ACH" : r}s you send ({unit.toLowerCase()})</span>
-                    <NumberInput value={disp(r)} onChange={(v) => setDisp(r, v)} />
-                  </label>
-                ))}
-                <p className="hint">These are <b>outbound</b> payments you originate — the only ones you control. What comes IN (deposits, incoming wires) is set by the sender, so it's not modeled.</p>
-
-                <label className="fld"><span>One-time setup cost ($)</span><NumberInput value={oneTime} onChange={setOneTime} /></label>
-                <label className="fld"><span>Annual platform cost ($/yr)</span><NumberInput value={annual} onChange={setAnnual} /></label>
-
-                <h2>2 · How much you shift to instant</h2>
-                {LEGACY.map((r) => (
-                  <label className="fld slider" key={r}>
-                    <span>{r} you send instantly instead: <b>{subst[r]}%</b></span>
-                    <input type="range" min="0" max="100" value={subst[r]} onChange={(e) => setSubst({ ...subst, [r]: +e.target.value })} />
-                  </label>
-                ))}
-                <p className="hint">Destination: <b>Instant Payments (FedNow / RTP)</b>. This is "ACH-shrinking": a share of your outbound file goes instant instead. Bounds: <a href={SUBST_SRC.url} target="_blank" rel="noreferrer">{SUBST_SRC.publisher}</a>.</p>
-                <div className="two">
-                  <label className="fld slider"><span>Discount rate: <b>{disc}%</b></span><input type="range" min="0" max="20" value={disc} onChange={(e) => setDisc(+e.target.value)} /></label>
-                  <label className="fld slider"><span>Horizon: <b>{horizon} yr</b></span><input type="range" min="1" max="10" value={horizon} onChange={(e) => setHorizon(+e.target.value)} /></label>
-                </div>
-              </section>
-
+            <div className="grid onecol">
               <section className="results">
                 <div className={res.net > 0 ? "savehero" : "savehero neg"}>
                   <div className="lbl">Estimated savings from moving outbound volume to instant</div>
@@ -304,8 +404,18 @@ export default function App() {
                   <div className="metric"><span>Annual platform cost</span><b>{money(annual)}</b></div>
                 </div>
 
+                <SegmentBreakdown result={res} segCosts={segCosts} volBySeg={volBySeg} />
+
                 <div className="card chart">
-                  <h3>Cost per transaction — by layer (network · provider · your own)</h3>
+                  <h3>Cost per transaction — by layer (network · provider · your own) — <span style={{ color: SEG_META[activeSegment].color }}>{SEG_META[activeSegment].label}</span></h3>
+                  <div className="segtabs inline">
+                    {SEGMENTS.map((s) => (
+                      <button key={s} className={activeSegment === s ? "on" : ""} onClick={() => setActiveSegment(s)}
+                        style={activeSegment === s ? { borderColor: SEG_META[s].color, color: SEG_META[s].color } : undefined}>
+                        {SEG_META[s].label}
+                      </button>
+                    ))}
+                  </div>
                   <ResponsiveContainer width="100%" height={250}>
                     <BarChart data={layerData} layout="vertical" margin={{ left: 8, right: 30, top: 4, bottom: 4 }}>
                       <XAxis type="number" hide /><YAxis type="category" dataKey="name" width={100} tickLine={false} axisLine={false} />
@@ -432,38 +542,95 @@ export default function App() {
         {tab === "compare" && <Compare scenarios={scenarios} onLoad={loadScenario} onDelete={deleteScenario} />}
 
         {/* ============ COST ASSUMPTIONS (3 layers + mini-calcs) ============ */}
-        {tab === "assum" && <Assumptions costs={costs} setComp={setComp} vol={vol} overrides={overrides} setOverride={setOverride} applyToAll={applyToAll} />}
+        {tab === "assum" && (
+          <Assumptions
+            segCosts={segCosts} setComp={setComp} volBySeg={volBySeg}
+            overrides={overrides} setOverride={setOverride}
+            applyToAllRails={applyToAllRails} applyToAllSegments={applyToAllSegments}
+            activeSegment={activeSegment} setActiveSegment={setActiveSegment}
+            band={band} applyBand={applyBand}
+          />
+        )}
       </main>
 
       <footer className="wrap">
-        Payfinia · USF FinTech Graduate Project · Cost = Network + Provider + FI internal · Migration = outbound volume you originate ·
-        Figures current as of the 2025–2026 research pass · Estimate, not a guarantee.
+        Payfinia · USF FinTech Graduate Project · Cost = Network + Provider + FI internal, costed per customer segment ·
+        Migration = outbound volume you originate · Figures current as of the 2026 research pass · Estimate, not a guarantee.
       </footer>
       <ChatAssistant onApply={applyFromAssistant} />
+    </div>
+    </div>
+  );
+}
+
+// ---------- open methodology flags: shown, not hidden ----------
+function MethodFlags({ open, setOpen }) {
+  const high = METHOD_FLAGS.filter((f) => f.severity === "high").length;
+  return (
+    <div className={"flagbox" + (open ? " open" : "")}>
+      <button className="flaghead" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span className="flagdot" />
+        <b>{METHOD_FLAGS.length} open methodology flags</b>
+        <span className="flagsub">{high} need resolving before this goes to a client — for Nizar's cost-component review</span>
+        <span className="flagcaret">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div className="flagbody">
+          {METHOD_FLAGS.map((f) => (
+            <div className={"flagitem " + f.severity} key={f.id}>
+              <div className="flagtop">
+                <span className={"sev " + f.severity}>{f.severity === "high" ? "High" : "Medium"}</span>
+                <b>{f.title}</b>
+                <span className="flagaffects">{f.affects}</span>
+              </div>
+              <p>{f.body}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ---------- Cost Assumptions tab: 3-layer table + mini-calculators + sources ----------
-function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }) {
+function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, applyToAllRails, applyToAllSegments, activeSegment, setActiveSegment, band, applyBand }) {
+  const seg = activeSegment;
   const [rail, setRail] = useState("Check");
+  const costs = segCosts[seg];
   const c = costs[rail];
-  const ovActive = overrides[rail] !== "" && !isNaN(+overrides[rail]);
-  // mini-calc local inputs
-  const [fte, setFte] = useState(2), [salary, setSalary] = useState(55000), [items, setItems] = useState(vol[rail] || 100000);
-  const [failed, setFailed] = useState(1500), [perFail, setPerFail] = useState(8);
-  const [fraudUsd, setFraudUsd] = useState(50000), [fItems, setFItems] = useState(vol[rail] || 100000);
-  const [fpUsd, setFpUsd] = useState(12000), [fpItems, setFpItems] = useState(vol[rail] || 100000);
-  const [amlUsd, setAmlUsd] = useState(15000), [amlItems, setAmlItems] = useState(vol[rail] || 100000);
-  const [recFte, setRecFte] = useState(1), [recSalary, setRecSalary] = useState(55000), [recItems, setRecItems] = useState(vol[rail] || 100000);
-  const [liqBal, setLiqBal] = useState(500000), [liqRate, setLiqRate] = useState(4), [liqItems, setLiqItems] = useState(vol[rail] || 100000);
+  const segVol = volBySeg[seg] || {};
+  const ovVal = overrides[seg]?.[rail] ?? "";
+  const ovActive = ovVal !== "" && !isNaN(+ovVal);
+  const src = SEG_SOURCING[seg]?.[rail];
 
-  const procPer = items > 0 ? (fte * salary) / items : 0;
-  const failRate = fItemsSafe(items) > 0 ? failed / items : 0;
-  const fraudPer = fItems > 0 ? fraudUsd / fItems : 0;
-  const fpPer = fpItems > 0 ? fpUsd / fpItems : 0;
-  const amlPer = amlItems > 0 ? amlUsd / amlItems : 0;
-  const recPer = recItems > 0 ? (recFte * recSalary) / recItems : 0;
+  // mini-calc local inputs.
+  // Nizar Jamal, 2026-07-28: the FTE model "uses basic counts and labor costs
+  // but fails to adequately reflect the fraction of time spent on specific
+  // payment rails — such as same-day ACH versus instant payments". pctTime is
+  // that missing factor; `loaded` applies a benefits/overhead multiplier.
+  const [fte, setFte] = useState(2), [salary, setSalary] = useState(55000);
+  const [pctTime, setPctTime] = useState(25), [loaded, setLoaded] = useState(true);
+  const [items, setItems] = useState(Math.round(segVol[rail] || 100000));
+  const [failed, setFailed] = useState(1500), [perFail, setPerFail] = useState(8);
+  const [fraudUsd, setFraudUsd] = useState(50000), [fItems, setFItems] = useState(Math.round(segVol[rail] || 100000));
+  const [fpUsd, setFpUsd] = useState(12000), [fpItems, setFpItems] = useState(Math.round(segVol[rail] || 100000));
+  const [amlUsd, setAmlUsd] = useState(15000), [amlItems, setAmlItems] = useState(Math.round(segVol[rail] || 100000));
+  const [recFte, setRecFte] = useState(1), [recSalary, setRecSalary] = useState(55000);
+  const [recPctTime, setRecPctTime] = useState(20), [recItems, setRecItems] = useState(Math.round(segVol[rail] || 100000));
+  const [liqBal, setLiqBal] = useState(500000), [liqRate, setLiqRate] = useState(4), [liqItems, setLiqItems] = useState(Math.round(segVol[rail] || 100000));
+
+  // re-point the mini-calcs at the selected segment x rail volume
+  useEffect(() => {
+    const v = Math.round(segVol[rail] || 0);
+    if (v > 0) { setItems(v); setFItems(v); setFpItems(v); setAmlItems(v); setRecItems(v); setLiqItems(v); }
+  }, [seg, rail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const procPer = laborPerItem({ fte, salary, pctTime, items, loaded });
+  const failRate = items > 0 ? failed / items : 0;
+  const fraudPer = perItem(fraudUsd, fItems);
+  const fpPer = perItem(fpUsd, fpItems);
+  const amlPer = perItem(amlUsd, amlItems);
+  const recPer = laborPerItem({ fte: recFte, salary: recSalary, pctTime: recPctTime, items: recItems, loaded });
   const liqPer = liqItems > 0 ? (liqBal * (liqRate / 100)) / liqItems : 0;
 
   const layers = layerTotals(c);
@@ -480,24 +647,66 @@ function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }
       </details>
       <p className="lead">Cost per transaction, split into <b>3 layers</b>: the <b style={{ color: L1 }}>network</b> charges, the <b style={{ color: L2 }}>provider (Payfinia, Instant only)</b> charge, and your <b style={{ color: L3 }}>own internal</b> cost. All values are <b>$ per transaction</b> unless marked “rate.” Build the internal numbers from figures you actually have — or override the total outright.</p>
 
+      {/* ---- segment selector: the modular structure, made explicit ---- */}
+      <div className="card segpicker">
+        <div className="segpickrow">
+          <div>
+            <h3>1 · Which customer segment are you costing?</h3>
+            <p className="fine">Each segment carries its own internal cost stack. Network and provider fees are the same
+              across segments — the Fed and TCH charge the FI the same per-item fee regardless of who the payment is for.</p>
+          </div>
+          <div className="segtabs big">
+            {SEGMENTS.map((s) => (
+              <button key={s} className={seg === s ? "on" : ""} onClick={() => setActiveSegment(s)}
+                style={seg === s ? { borderColor: SEG_META[s].color, color: SEG_META[s].color } : undefined}>
+                <b>{SEG_META[s].label}</b><em>{SEG_META[s].short}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+        {seg === "Business" && (
+          <div className="bandrow">
+            <span>Business cost band:</span>
+            <div className="toggle small">
+              {Object.keys(BUSINESS_BANDS).map((b) => (
+                <button key={b} className={band === b ? "on" : ""} onClick={() => applyBand(b)}>{b}</button>
+              ))}
+              {band === "Custom" && <button className="on">Custom</button>}
+            </div>
+            <p className="fine">{BUSINESS_BANDS[band]?.note || "You've hand-edited a component, so the band no longer applies."}</p>
+          </div>
+        )}
+        {seg === "Internal" && (
+          <p className="fine warnline">⚠ No public dataset breaks out a financial institution's own-account cost per item.
+            Every figure in this segment is an <b>Estimate</b> and a calibration target — not evidence.</p>
+        )}
+      </div>
+
       <div className="assumgrid">
         <div className="card assum-stack">
-          <h3>Cost stack by layer — {rail}</h3>
+          <h3>2 · Cost stack — <span style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</span> · {rail}</h3>
           <label className="fld"><span>Choose a rail</span>
             <select value={rail} onChange={(e) => setRail(e.target.value)}>{RAILS.map((r) => <option key={r}>{r}</option>)}</select></label>
+          {src && (
+            <p className="srcline">
+              <StatusTag status={src.status} /> {src.basis}{" "}
+              <a href={src.url} target="_blank" rel="noreferrer">verify ↗</a>
+            </p>
+          )}
           <table className="tbl small">
             <thead><tr><th>Layer</th><th>Component</th><th>Value</th></tr></thead>
             <tbody>
               {COMP_FIELDS.filter((f) => f.key !== "provider" || rail === "Instant").map((f) => (
-                <tr key={f.key}>
+                <tr key={f.key} className={f.perSegment ? "" : "shared"}>
                   <td><span className="layerpill" style={{ background: (f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3) + "22", color: f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3 }}>{f.layer}</span></td>
-                  <td>{f.label}</td>
+                  <td>{f.label}{!f.perSegment && <em className="sharedtag" title="Same across all three segments">shared</em>}</td>
                   <td><span className="valwrap">
                     {f.kind === "$" && <span className="pfx">$</span>}
                     <input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
-                      onChange={(e) => setComp(rail, f.key, +e.target.value)} style={{ width: 76 }} />
+                      onChange={(e) => setComp(seg, rail, f.key, +e.target.value)} style={{ width: 76 }} />
                     {f.kind === "%" && <span className="sfx">rate</span>}
-                    <button className="applyall" title={`Apply this ${f.label} to all rails`} onClick={() => applyToAll(f.key, c[f.key])}>⇊ all</button>
+                    <button className="applyall" title={`Apply this ${f.label} to every rail in ${SEG_META[seg].label}`} onClick={() => applyToAllRails(seg, f.key, c[f.key])}>⇊ rails</button>
+                    <button className="applyall alt" title={`Apply this ${f.label} for ${rail} to all three segments`} onClick={() => applyToAllSegments(rail, f.key, c[f.key])}>⇉ segs</button>
                   </span></td>
                 </tr>
               ))}
@@ -507,65 +716,112 @@ function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }
           </table>
           <p className="fine"><b style={{ color: L1 }}>Network</b> {money2(layers.network)} · {rail === "Instant" && <><b style={{ color: L2 }}>Provider</b> {money2(layers.provider)} · </>}<b style={{ color: L3 }}>Internal</b> {money2(layers.internal)} = <b>{money2(railTotal(c))}</b>/txn</p>
 
+          {/* side-by-side so the segment differential is visible at a glance */}
+          <table className="tbl small segcompare">
+            <thead><tr><th>{rail} all-in</th>{SEGMENTS.map((s) => <th key={s}>{SEG_META[s].label}</th>)}</tr></thead>
+            <tbody>
+              <tr>
+                <td className="rl">$ / txn</td>
+                {SEGMENTS.map((s) => (
+                  <td key={s} className={s === seg ? "here" : ""} style={{ color: SEG_META[s].color, fontWeight: s === seg ? 700 : 500 }}>
+                    {money2(railTotal(segCosts[s][rail]))}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+
           <div className="overridebox">
             <label className="fld" style={{ marginBottom: 6 }}>
-              <span>Override total $/txn for {rail} <em>(optional — use your own all-in number)</em></span>
+              <span>Override total $/txn for {SEG_META[seg].label} · {rail} <em>(optional — use your own all-in number)</em></span>
               <span className="valwrap"><span className="pfx">$</span>
-                <input type="number" step="0.01" value={overrides[rail]} placeholder={railTotal(c).toFixed(2)}
-                  onChange={(e) => setOverride(rail, e.target.value)} style={{ width: 110 }} /></span>
+                <input type="number" step="0.01" value={ovVal} placeholder={railTotal(c).toFixed(2)}
+                  onChange={(e) => setOverride(seg, rail, e.target.value)} style={{ width: 110 }} /></span>
             </label>
             {ovActive
-              ? <p className="fine ovon">✓ Using your override of <b>{money2(+overrides[rail])}</b>/txn for {rail} — the stack above is ignored, and all results use this. <button type="button" className="linkbtn" onClick={() => setOverride(rail, "")}>Clear override</button></p>
+              ? <p className="fine ovon">✓ Using your override of <b>{money2(+ovVal)}</b>/txn for {SEG_META[seg].label} · {rail} — the stack above is ignored. <button type="button" className="linkbtn" onClick={() => setOverride(seg, rail, "")}>Clear override</button></p>
               : <p className="fine">Leave blank to use the built-up stack ({money2(railTotal(c))}/txn).</p>}
           </div>
         </div>
 
         <div className="card assum-builder">
-          <h3>Cost Builder — build the internal cost from numbers you have</h3>
-          <p className="fine">You probably can't say "$2.00 per check" off the top of your head — but you know these. Compute it, then apply.</p>
+          <h3>3 · Cost Builder — <span style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</span> · {rail}</h3>
+          <p className="fine">You probably can't say "$2.00 per business check" off the top of your head — but you know these.
+            Item counts are pre-filled with this segment's share of {rail} volume ({num(segVol[rail] || 0)}/yr). Compute, then apply.</p>
 
-          <div className="minicalc">
+          <div className="minicalc primary">
             <b>Processing / labor</b>
-            <div className="mc-row"><label>Staff (FTE) on {rail}</label><input type="number" value={fte} onChange={(e) => setFte(+e.target.value)} /></div>
-            <div className="mc-row"><label>Avg loaded salary ($/yr)</label><NumberInput value={salary} onChange={setSalary} /></div>
-            <div className="mc-row"><label>{rail}s handled / yr</label><NumberInput value={items} onChange={setItems} /></div>
-            <div className="mc-out">= <b>{money2(procPer)}</b> / item <button onClick={() => setComp(rail, "processing", +procPer.toFixed(3))}>Apply</button></div>
+            <p className="mc-note">
+              Headcount × salary alone overstates cost — those people don't work on one rail all day. Enter the
+              <b> share of their time</b> that actually goes to {rail} for {SEG_META[seg].label.toLowerCase()} customers.
+            </p>
+            <div className="mc-row"><label>Staff (FTE) touching {rail}</label><input type="number" step="0.1" value={fte} onChange={(e) => setFte(+e.target.value)} /></div>
+            <div className="mc-row"><label>Avg base salary ($/yr)</label><NumberInput value={salary} onChange={setSalary} /></div>
+            <div className="mc-row highlight">
+              <label>% of their time on this rail × segment</label>
+              <span className="pctwrap">
+                <input type="range" min="0" max="100" value={pctTime} onChange={(e) => setPctTime(+e.target.value)} />
+                <input type="number" min="0" max="100" value={pctTime} onChange={(e) => setPctTime(+e.target.value)} style={{ width: 58 }} />
+                <span className="sfx">%</span>
+              </span>
+            </div>
+            <div className="mc-row">
+              <label>Load salary with benefits &amp; overhead (×{LOADED_SALARY_MULT})</label>
+              <input type="checkbox" checked={loaded} onChange={(e) => setLoaded(e.target.checked)} />
+            </div>
+            <div className="mc-row"><label>{rail}s handled / yr ({SEG_META[seg].label})</label><NumberInput value={items} onChange={setItems} /></div>
+            <div className="mc-out">
+              = <b>{money2(procPer)}</b> / item
+              <button onClick={() => setComp(seg, rail, "processing", +procPer.toFixed(4))}>Apply</button>
+            </div>
+            <p className="mc-formula">
+              {fte} FTE × {money(salary)}{loaded ? ` × ${LOADED_SALARY_MULT}` : ""} × {pctTime}% ÷ {num(items)} items
+            </p>
           </div>
 
           <div className="minicalc">
             <b>Failure / exception</b>
             <div className="mc-row"><label>Items failed / returned / yr</label><NumberInput value={failed} onChange={setFailed} /></div>
             <div className="mc-row"><label>Cost per failed item ($)</label><input type="number" value={perFail} onChange={(e) => setPerFail(+e.target.value)} /></div>
-            <div className="mc-out">rate = <b>{(failRate * 100).toFixed(2)}%</b> <button onClick={() => { setComp(rail, "failure_rate", +failRate.toFixed(4)); setComp(rail, "cost_per_failure", perFail); }}>Apply</button></div>
+            <div className="mc-out">rate = <b>{(failRate * 100).toFixed(2)}%</b> <button onClick={() => { setComp(seg, rail, "failure_rate", +failRate.toFixed(4)); setComp(seg, rail, "cost_per_failure", perFail); }}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Fraud loss</b>
-            <div className="mc-row"><label>Total fraud $ on {rail} / yr</label><NumberInput value={fraudUsd} onChange={setFraudUsd} /></div>
+            <div className="mc-row"><label>Total fraud $ on {rail} / yr ({SEG_META[seg].label})</label><NumberInput value={fraudUsd} onChange={setFraudUsd} /></div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fItems} onChange={setFItems} /></div>
-            <div className="mc-out">= <b>{money2(fraudPer)}</b> / item <button onClick={() => setComp(rail, "fraud_loss", +fraudPer.toFixed(3))}>Apply</button></div>
+            <div className="mc-out">= <b>{money2(fraudPer)}</b> / item <button onClick={() => setComp(seg, rail, "fraud_loss", +fraudPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Fraud prevention (screening &amp; tools)</b>
             <div className="mc-row"><label>Fraud tools + staff ($/yr) on {rail}</label><NumberInput value={fpUsd} onChange={setFpUsd} /></div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fpItems} onChange={setFpItems} /></div>
-            <div className="mc-out">= <b>{money2(fpPer)}</b> / item <button onClick={() => setComp(rail, "fraud_prevention", +fpPer.toFixed(3))}>Apply</button></div>
+            <div className="mc-out">= <b>{money2(fpPer)}</b> / item <button onClick={() => setComp(seg, rail, "fraud_prevention", +fpPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Compliance (AML / BSA)</b>
             <div className="mc-row"><label>AML/BSA &amp; OFAC cost ($/yr) on {rail}</label><NumberInput value={amlUsd} onChange={setAmlUsd} /></div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={amlItems} onChange={setAmlItems} /></div>
-            <div className="mc-out">= <b>{money2(amlPer)}</b> / item <button onClick={() => setComp(rail, "compliance", +amlPer.toFixed(3))}>Apply</button></div>
+            <div className="mc-out">= <b>{money2(amlPer)}</b> / item <button onClick={() => setComp(seg, rail, "compliance", +amlPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Reconciliation</b>
-            <div className="mc-row"><label>Recon staff (FTE) on {rail}</label><input type="number" value={recFte} onChange={(e) => setRecFte(+e.target.value)} /></div>
-            <div className="mc-row"><label>Avg loaded salary ($/yr)</label><NumberInput value={recSalary} onChange={setRecSalary} /></div>
+            <p className="mc-note">Same time-allocation logic as processing — recon staff split across rails too.</p>
+            <div className="mc-row"><label>Recon staff (FTE)</label><input type="number" step="0.1" value={recFte} onChange={(e) => setRecFte(+e.target.value)} /></div>
+            <div className="mc-row"><label>Avg base salary ($/yr)</label><NumberInput value={recSalary} onChange={setRecSalary} /></div>
+            <div className="mc-row highlight">
+              <label>% of their time on this rail × segment</label>
+              <span className="pctwrap">
+                <input type="range" min="0" max="100" value={recPctTime} onChange={(e) => setRecPctTime(+e.target.value)} />
+                <input type="number" min="0" max="100" value={recPctTime} onChange={(e) => setRecPctTime(+e.target.value)} style={{ width: 58 }} />
+                <span className="sfx">%</span>
+              </span>
+            </div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={recItems} onChange={setRecItems} /></div>
-            <div className="mc-out">= <b>{money2(recPer)}</b> / item <button onClick={() => setComp(rail, "reconciliation", +recPer.toFixed(3))}>Apply</button></div>
+            <div className="mc-out">= <b>{money2(recPer)}</b> / item <button onClick={() => setComp(seg, rail, "reconciliation", +recPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
@@ -573,7 +829,7 @@ function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }
             <div className="mc-row"><label>Avg prefunded balance ($)</label><NumberInput value={liqBal} onChange={setLiqBal} /></div>
             <div className="mc-row"><label>Cost of funds (% / yr)</label><input type="number" step="0.1" value={liqRate} onChange={(e) => setLiqRate(+e.target.value)} /></div>
             <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={liqItems} onChange={setLiqItems} /></div>
-            <div className="mc-out">= <b>{money2(liqPer)}</b> / item <button onClick={() => setComp(rail, "liquidity", +liqPer.toFixed(4))}>Apply</button></div>
+            <div className="mc-out">= <b>{money2(liqPer)}</b> / item <button onClick={() => setComp(seg, rail, "liquidity", +liqPer.toFixed(4))}>Apply</button></div>
           </div>
         </div>
       </div>
@@ -594,4 +850,3 @@ function Assumptions({ costs, setComp, vol, overrides, setOverride, applyToAll }
     </div>
   );
 }
-function fItemsSafe(x) { return x; }

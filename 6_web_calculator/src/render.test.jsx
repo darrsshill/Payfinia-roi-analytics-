@@ -8,7 +8,7 @@ import ControlPanel from "./ControlPanel.jsx";
 import SegmentBreakdown from "./SegmentBreakdown.jsx";
 import {
   DEFAULT_SEG_COSTS, SEG_MIX_DEFAULT, SUBST_DEFAULT, SEGMENTS, PRESETS,
-  splitVolume, runSegmented,
+  splitVolume, runSegmented, LEGACY,
 } from "./data.js";
 
 const p = PRESETS["Mid CFI (~$1B)"];
@@ -22,13 +22,13 @@ beforeEach(() => { window.localStorage.clear(); });
 describe("render smoke", () => {
   it("App renders from a clean slate (wizard first)", () => {
     const html = renderToString(<App />);
-    expect(html).toContain("PAYFINIA");
+    expect(html).toContain("Payfinia");
   });
 
   it("App renders the advanced view without throwing", () => {
     window.localStorage.setItem("payfinia_calc_v2", JSON.stringify({ simple: false, stage: "result", tab: "calc" }));
     const html = renderToString(<App />);
-    expect(html).toContain("Instant Payments ROI Calculator");
+    expect(html).toContain("Instant Payments ROI Model");
   });
 
   it("renders every advanced tab", () => {
@@ -54,8 +54,22 @@ describe("render smoke", () => {
     expect(() => renderToString(<App />)).not.toThrow();
   });
 
-  it("Wizard renders", () => {
-    expect(renderToString(<Wizard onComplete={() => {}} onSkip={() => {}} />)).toContain("Welcome");
+  it("Wizard renders and asks for all four outbound rails", () => {
+    const html = renderToString(<Wizard onComplete={() => {}} onSkip={() => {}} />);
+    expect(html).toContain("Payfinia");
+    // the stepper labels every stage, including the volume step
+    for (const label of ["Welcome", "Institution", "Volume", "Customers", "Migration"]) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it("Wizard volume step collects Check, Wire, Same-Day ACH and standard ACH", () => {
+    // reach into the step definitions by rendering and walking the stepper is
+    // not possible server-side, so assert on the module's rail copy instead.
+    const html = renderToString(<Wizard onComplete={() => {}} onSkip={() => {}} />);
+    expect(html).toContain("Volume");
+    // all four rails must be present in the shipped LEGACY list the step maps over
+    expect(LEGACY).toEqual(["Check", "Wire", "Same-Day ACH", "ACH"]);
   });
 
   it("ControlPanel renders open and collapsed", () => {
@@ -69,8 +83,13 @@ describe("render smoke", () => {
       disc: 10, setDisc: () => {}, horizon: 5, setHorizon: () => {},
       onRestartWizard: () => {}, onReset: () => {}, activeSegment: "Business", setActiveSegment: () => {},
     };
-    expect(renderToString(<ControlPanel {...props} />)).toContain("Control panel");
-    expect(renderToString(<ControlPanel {...props} open={false} />)).toContain("Adjust inputs");
+    const openHtml = renderToString(<ControlPanel {...props} />);
+    expect(openHtml).toContain("Model inputs");
+    // all four outbound rails are editable in the panel, not just check and wire
+    for (const label of ["Checks", "Wires", "Same-Day ACH", "Standard ACH"]) {
+      expect(openHtml).toContain(label);
+    }
+    expect(renderToString(<ControlPanel {...props} open={false} />)).toContain("Inputs");
   });
 
   it("SegmentBreakdown names all three segments", () => {

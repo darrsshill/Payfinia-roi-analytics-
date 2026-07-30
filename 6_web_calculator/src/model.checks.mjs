@@ -101,8 +101,8 @@ for (const seg of SEGMENTS) {
     `per-txn saving $${row.per.toFixed(4)}`);
 }
 
-console.log("\n8 · Keith's high-touch B2B band hits its stated targets");
-const banded = applyBusinessBand(JSON.parse(JSON.stringify(DEFAULT_SEG_COSTS)), "High-touch B2B (Keith)");
+console.log("\n8 · The high-touch B2B band hits its stated targets");
+const banded = applyBusinessBand(JSON.parse(JSON.stringify(DEFAULT_SEG_COSTS)), "High-touch B2B");
 for (const [rail, want] of Object.entries({ "Check": 6.00, "Instant": 3.00, "Wire": 18.00 })) {
   const got = railTotal(banded.Business[rail]);
   check(`banded Business ${rail} = $${want}`, near(got, want), `got $${got.toFixed(3)}`);
@@ -110,7 +110,7 @@ for (const [rail, want] of Object.entries({ "Check": 6.00, "Instant": 3.00, "Wir
 check("band leaves Retail untouched",
   near(railTotal(banded.Retail.Check), railTotal(DEFAULT_SEG_COSTS.Retail.Check), 1e-9));
 
-console.log("\n9 · FTE mini-calc honours the time-allocation factor (Nizar)");
+console.log("\n9 · FTE mini-calc honours the time-allocation factor");
 const full = laborPerItem({ fte: 2, salary: 55000, pctTime: 100, items: 100000, loaded: false });
 const quarter = laborPerItem({ fte: 2, salary: 55000, pctTime: 25, items: 100000, loaded: false });
 check("100% time = 2 × 55000 / 100000 = $1.10", near(full, 1.10, 1e-9), `got ${full}`);
@@ -121,7 +121,7 @@ check("loaded salary applies the overhead multiplier",
 check("zero items does not divide by zero",
   laborPerItem({ fte: 2, salary: 55000, pctTime: 50, items: 0 }) === 0);
 
-console.log("\n10 · Customer-count intake produces a valid mix (Keith)");
+console.log("\n10 · Customer-count intake produces a valid mix");
 const mix = mixFromCustomers({ retail: 55000, smb: 3200, midmarket: 220 });
 for (const rail of LEGACY) {
   const tot = SEGMENTS.reduce((s, seg) => s + mix[rail][seg], 0);

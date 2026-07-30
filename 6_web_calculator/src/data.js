@@ -145,25 +145,25 @@ export const SEG_DEFAULTS = {
 // reviewer can see instantly which cells are sourced and which are targets.
 export const SEG_SOURCING = {
   Retail: {
-    "Check":        { status: "Partly cited", basis: "v3 FI-side stack; Fed check fee schedule + AFP fraud incidence", url: U.CHECK_FEE },
-    "Wire":         { status: "Partly cited", basis: "v3 FI-side stack; Fedwire 2026 fee schedule + AFP fraud incidence", url: U.WIRE_FEE },
-    "Same-Day ACH": { status: "Partly cited", basis: "v3 FI-side stack; FedACH 2026 Same Day fees + Nacha return rate", url: U.ACH_FEE },
-    "ACH":          { status: "Partly cited", basis: "v3 FI-side stack; FedACH 2026 fees + Nacha return rate", url: U.ACH_FEE },
-    "Instant":      { status: "Partly cited", basis: "Reconciles to the $0.82 all-in instant figure in Deliverable 1", url: U.FEDNOW_FEE },
+    "Check":        { status: "Partly cited", basis: "Institution-side stack; Fed check fee schedule plus AFP fraud incidence", url: U.CHECK_FEE },
+    "Wire":         { status: "Partly cited", basis: "Institution-side stack; Fedwire 2026 fee schedule plus AFP fraud incidence", url: U.WIRE_FEE },
+    "Same-Day ACH": { status: "Partly cited", basis: "Institution-side stack; FedACH 2026 Same Day fees plus Nacha return rate", url: U.ACH_FEE },
+    "ACH":          { status: "Partly cited", basis: "Institution-side stack; FedACH 2026 fees plus Nacha return rate", url: U.ACH_FEE },
+    "Instant":      { status: "Partly cited", basis: "Reconciles to the published $0.82 all-in instant figure", url: U.FEDNOW_FEE },
   },
   Business: {
     "Check":        { status: "Cited", basis: "AFP 2022 Payments Cost Benchmarking Survey — best-estimated mean $2.98/item to issue (median range $2.01–$4.00, n=347)", url: U.AFP_COST_PDF },
     "Wire":         { status: "Cited", basis: "AFP 2022 — initiating a wire: external median $7.00 + internal median $5.00 = $12.00/item (total median range $10.01–$15.00)", url: U.AFP_COST_PDF },
     "Same-Day ACH": { status: "Derived", basis: "AFP does not break out Same-Day. Derived: business ACH internal x the retail Same-Day/ACH cost ratio (3.3x)", url: U.AFP_COST_PDF },
     "ACH":          { status: "Cited", basis: "AFP 2022 — ACH external $0.25 + internal $0.15 = $0.40/item (median range $0.26–$0.50)", url: U.AFP_COST_PDF },
-    "Instant":      { status: "Cited", basis: "AFP 2022 — RTP initiate/receive median band $0.01–$2.50; midpoint $1.25 used. 40% of firms report >$2.50, so the high-touch B2B band is available below", url: U.AFP_COST_PDF },
+    "Instant":      { status: "Cited", basis: "AFP 2022 — RTP initiate/receive median band $0.01–$2.50, midpoint $1.25 used. 40% of firms report above $2.50, so a high-touch B2B band is selectable", url: U.AFP_COST_PDF },
   },
   Internal: {
-    "Check":        { status: "Estimate", basis: "No public source segments FI own-account cost. Calibration target — Payfinia production data", url: U.NCUA },
-    "Wire":         { status: "Estimate", basis: "No public source segments FI own-account cost. Calibration target — Payfinia production data", url: U.NCUA },
-    "Same-Day ACH": { status: "Estimate", basis: "No public source segments FI own-account cost. Calibration target — Payfinia production data", url: U.NCUA },
-    "ACH":          { status: "Estimate", basis: "No public source segments FI own-account cost. Calibration target — Payfinia production data", url: U.NCUA },
-    "Instant":      { status: "Estimate", basis: "No public source segments FI own-account cost. Calibration target — Payfinia production data", url: U.NCUA },
+    "Check":        { status: "Estimate", basis: "No public source segments own-account cost. Calibration target — production data", url: U.NCUA },
+    "Wire":         { status: "Estimate", basis: "No public source segments own-account cost. Calibration target — production data", url: U.NCUA },
+    "Same-Day ACH": { status: "Estimate", basis: "No public source segments own-account cost. Calibration target — production data", url: U.NCUA },
+    "ACH":          { status: "Estimate", basis: "No public source segments own-account cost. Calibration target — production data", url: U.NCUA },
+    "Instant":      { status: "Estimate", basis: "No public source segments own-account cost. Calibration target — production data", url: U.NCUA },
   },
 };
 
@@ -176,44 +176,43 @@ export const METHOD_FLAGS = [
     id: "measurement-basis",
     severity: "high",
     title: "Business and Retail costs are measured on different bases",
-    body: "The Business column is anchored to the AFP Payments Cost Benchmarking Survey, which measures what a CORPORATION spends to make a payment (their staff, their bank fees, their IT). The Retail column is the v3 stack, which measures what the FINANCIAL INSTITUTION spends to process one. These are not the same quantity. The segment structure is right; the levels are not yet strictly comparable until Payfinia production data lands.",
+    body: "The Business column is anchored to the AFP Payments Cost Benchmarking Survey, which measures what a corporation spends to make a payment — their staff, their bank fees, their IT. The Retail column measures what the financial institution spends to process one. These are not the same quantity. The segment structure holds, but the levels are not strictly comparable until they are calibrated against production data.",
     affects: "All Business-segment figures",
   },
   {
     id: "retail-wire-inversion",
     severity: "high",
     title: "Retail wire ($18.57) currently costs more than business wire ($12.00)",
-    body: "That ordering is almost certainly backwards — a commercial wire carries callbacks, dual control and higher fraud review than a consumer wire. It falls out of flag #1: the retail figure comes from a v3 processing estimate of $12.00/item of internal labor that was never independently sourced, while the business figure is the AFP published $12.00 all-in. Recommend re-deriving the retail wire labor line from Payfinia or call-report data before this goes to a client.",
+    body: "That ordering is almost certainly backwards — a commercial wire carries callbacks, dual control and heavier fraud review than a consumer wire. It follows from the measurement-basis limitation above: the retail figure rests on a $12.00 per item internal labor estimate that was never independently sourced, while the business figure is the published AFP $12.00 all-in. The retail wire labor line should be re-derived from production or call-report data before it is relied upon.",
     affects: "Retail · Wire",
   },
   {
     id: "internal-unsourced",
     severity: "medium",
     title: "The Internal (FI) segment has no public source",
-    body: "No published dataset breaks out a financial institution's own-account cost per item. Every figure in the Internal column is an Estimate placed relative to Retail, and is a calibration target rather than evidence.",
+    body: "No published dataset breaks out a financial institution's own-account cost per item. Every figure in the Internal column is an estimate placed relative to Retail, and is a calibration target rather than evidence.",
     affects: "All Internal-segment figures",
   },
   {
     id: "check-mix-estimate",
     severity: "medium",
     title: "The check retail/business volume split is an estimate",
-    body: "Nacha publishes a B2B share for ACH (23% of count), so the ACH split is cited. No equivalent public split exists for check origination, so the 35/60/5 mix is inferred from Fed Payments Study consumer-use trends. Replace with the FI's own data at intake.",
+    body: "Nacha publishes a B2B share for ACH at 23% of count, so the ACH split is cited. No equivalent public split exists for check origination, so the 35/60/5 mix is inferred from Fed Payments Study consumer-use trends. Replace it with the institution's own data at intake.",
     affects: "Check · segment mix",
   },
 ];
 
-// Keith Riddle flagged that high-touch B2B runs well above the AFP median —
-// ~$3.00/item instant and ~$6.00/item check. Both sit inside the observed AFP
-// distribution (RTP: 13% of firms report $2.51–$5.00; Check: 33% report above
-// $4.00). Offered as a selectable band rather than silently overriding the
-// published central estimate.
+// High-touch B2B runs well above the AFP median — about $3.00/item instant and
+// $6.00/item check. Both sit inside the observed AFP distribution (RTP: 13% of
+// firms report $2.51–$5.00; Check: 33% report above $4.00). Offered as a
+// selectable band rather than silently overriding the published central estimate.
 export const BUSINESS_BANDS = {
   "AFP median (default)": {
-    note: "AFP 2022 central estimates. Check $2.98 · Wire $12.00 · ACH $0.40 · Instant $1.25 all-in.",
+    note: "AFP 2022 central estimates — Check $2.98 · Wire $12.00 · ACH $0.40 · Instant $1.25 all-in.",
     mult: 1.0,
   },
-  "High-touch B2B (Keith)": {
-    note: "Check ~$6.00 and instant ~$3.00 per item, as raised in the 2026-07-28 review. Sits at roughly the 75th–80th percentile of the AFP distribution.",
+  "High-touch B2B": {
+    note: "Check about $6.00 and instant about $3.00 per item — roughly the 75th to 80th percentile of the AFP distribution.",
     targets: { "Check": 6.00, "Wire": 18.00, "Same-Day ACH": 2.20, "ACH": 0.65, "Instant": 3.00 },
   },
 };

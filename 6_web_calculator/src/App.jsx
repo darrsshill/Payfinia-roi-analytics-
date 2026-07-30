@@ -73,7 +73,16 @@ export default function App() {
   const [customers, setCustomers] = useState(() => SAVED?.customers || { ...p0.customers });
   const [subst, setSubst] = useState(() => SAVED?.subst || clone(SUBST_DEFAULT));   // now subst[segment][rail]
   const [appetite, setAppetite] = useState(SAVED?.appetite || "Moderate");
-  const [band, setBand] = useState(SAVED?.band || "AFP median (default)");
+  // A saved session can hold a band name from an earlier build. Fall back to
+  // the closest current key so the band note doesn't read "hand-edited" while a
+  // band is plainly still in force.
+  const [band, setBand] = useState(() => {
+    const saved = SAVED?.band;
+    if (!saved) return "AFP median (default)";
+    if (BUSINESS_BANDS[saved] || saved === "Custom") return saved;
+    const match = Object.keys(BUSINESS_BANDS).find((k) => saved.startsWith(k.split(" (")[0]));
+    return match || "Custom";
+  });
   const [activeSegment, setActiveSegment] = useState(SAVED?.activeSegment || "Business");
   const [overrides, setOverrides] = useState(() => SAVED?.overrides || emptyOvBySeg());
   const [panelOpen, setPanelOpen] = useState(SAVED?.panelOpen ?? true);
@@ -174,11 +183,16 @@ export default function App() {
     setAppetite(name);
     if (APPETITE[name]) setSubst(clone(APPETITE[name]));
   }
+  // A band only describes the BUSINESS segment. The previous version rebuilt
+  // every segment from defaults, silently destroying hand-entered Retail and
+  // Internal costs. Reset Business only, then rescale it.
   function applyBand(name) {
     setBand(name);
-    setSegCosts(name === "AFP median (default)"
-      ? clone(DEFAULT_SEG_COSTS)
-      : applyBusinessBand(clone(DEFAULT_SEG_COSTS), name));
+    setSegCosts((prev) => {
+      const next = clone(prev);
+      next.Business = clone(DEFAULT_SEG_COSTS.Business);
+      return name === "AFP median (default)" ? next : applyBusinessBand(next, name);
+    });
   }
 
   // simple-view single migration dial, spread across segments
@@ -308,74 +322,70 @@ export default function App() {
     <div className="app shellmain">
       <header className="hero"><div className="wrap">
         <div className="herotop">
-          <div className="brand">PAYFINIA · MONEY MOVEMENT ANALYTICS</div>
+          <div className="brandwrap">
+            <div className="brand">Payfinia</div>
+            <div className="brandsub">Money movement analytics</div>
+          </div>
           <div className="herobtns">
-            <span className="savedtag">✓ Auto-saved</span>
-            {/* Kiran Garimella, 2026-07-28: increase the font size in the app.
-                Default is already larger; this lets a reader push it further. */}
+            <span className="savedtag">Auto-saved</span>
             <span className="textsize" title="Text size">
-              <button className="ts-sm" onClick={() => setUiScale(1)} aria-label="Small text">A</button>
-              <button className="ts-md" onClick={() => setUiScale(1.1)} aria-label="Medium text">A</button>
-              <button className="ts-lg" onClick={() => setUiScale(1.22)} aria-label="Large text">A</button>
+              <button className={"ts-sm" + (uiScale === 1 ? " on" : "")} onClick={() => setUiScale(1)} aria-label="Small text">A</button>
+              <button className={"ts-md" + (uiScale === 1.1 ? " on" : "")} onClick={() => setUiScale(1.1)} aria-label="Medium text">A</button>
+              <button className={"ts-lg" + (uiScale === 1.22 ? " on" : "")} onClick={() => setUiScale(1.22)} aria-label="Large text">A</button>
             </span>
-            <button className="guidedbtn accent" onClick={() => { setSimple(true); setStage("result"); }}>← Simple view</button>
-            <button className="guidedbtn" onClick={() => { setSimple(true); setStage("wizard"); }}>↺ Guided setup</button>
+            <button className="guidedbtn accent" onClick={() => { setSimple(true); setStage("result"); }}>← Client view</button>
+            <button className="guidedbtn" onClick={() => { setSimple(true); setStage("wizard"); }}>Guided setup</button>
             <button className="guidedbtn" onClick={resetAll}>Reset</button>
           </div>
         </div>
-        <h1>Instant Payments ROI Calculator</h1>
-        <p>{userName ? <>Welcome, <strong>{userName}</strong>{bankName ? <> — here's the picture for <strong>{bankName}</strong>.</> : "."} </> : null}
-          What your bank saves by moving the payments it <b>sends</b> (checks &amp; wires) to instant payments.
-          <strong> Costs split into network · provider · your own — every figure sourced.</strong></p>
+        <h1>Instant Payments ROI Model</h1>
+        <p>{userName ? <><strong>{userName}</strong>{bankName ? <> · <strong>{bankName}</strong></> : null} — </> : null}
+          What your institution saves by moving the payments it originates to instant.
+          Every cost is split into network, provider and internal layers, and costed separately for retail, business and
+          internal volume.</p>
       </div></header>
 
-      <nav className="tabs wrap">
-        <button className={tab === "assum" ? "on" : ""} onClick={() => setTab("assum")}>Cost Assumptions</button>
-        <button className={tab === "td" ? "on" : ""} onClick={() => setTab("td")}>Use My Financials</button>
-        <button className={tab === "calc" ? "on" : ""} onClick={() => setTab("calc")}>Savings Calculator</button>
-        <button className={tab === "why" ? "on" : ""} onClick={() => setTab("why")}>Why Migrate</button>
-        <button className={tab === "compare" ? "on" : ""} onClick={() => setTab("compare")}>Compare Versions{scenarios.length ? ` (${scenarios.length})` : ""}</button>
-        <button className={tab === "data" ? "on" : ""} onClick={() => setTab("data")}>Rail Data &amp; Sources</button>
+      <nav className="tabs wrap" aria-label="Sections">
+        <button className={tab === "calc" ? "on" : ""} onClick={() => setTab("calc")}>Results</button>
+        <button className={tab === "assum" ? "on" : ""} onClick={() => setTab("assum")}>Cost assumptions</button>
+        <button className={tab === "td" ? "on" : ""} onClick={() => setTab("td")}>Use my financials</button>
+        <button className={tab === "why" ? "on" : ""} onClick={() => setTab("why")}>Rail-by-rail case</button>
+        <button className={tab === "compare" ? "on" : ""} onClick={() => setTab("compare")}>Scenarios{scenarios.length ? ` (${scenarios.length})` : ""}</button>
+        <button className={tab === "data" ? "on" : ""} onClick={() => setTab("data")}>Data &amp; sources</button>
       </nav>
 
       <main className="wrap">
         {/* ============ CALCULATOR ============ */}
         {tab === "calc" && (
           <>
-            <div className="assistcta">
-              <span>👋 New here? Let the <b>Savings Assistant</b> ask a few questions and fill this in.</span>
-              <span className="arrow">💬 button, bottom-right →</span>
-            </div>
-
             <details className="method">
-              <summary>How the math works — read this once and every number below makes sense</summary>
+              <summary>Methodology — how every number on this page is derived</summary>
               <div className="methodbody">
                 <div className="mcol">
-                  <h4>1 · What each payment really costs you</h4>
-                  <p>Every rail has a fully-loaded cost per transaction, split into three layers: the <b>network fee</b>
-                    (published by the Fed/TCH — exact), the <b>provider fee</b> (what Payfinia charges), and <b>your own
-                    internal cost</b> (staff, failures, fraud, compliance). Defaults are public benchmarks; edit any of them
-                    on the Cost Assumptions tab.</p>
+                  <h4>What each payment costs</h4>
+                  <p>Every rail carries a fully-loaded cost per transaction split into three layers: the <b>network fee</b>
+                    (published by the Fed and TCH), the <b>provider fee</b>, and your <b>internal cost</b> (staff, failures,
+                    fraud, compliance). Defaults are public benchmarks and every one is editable.</p>
                 </div>
                 <div className="mcol">
-                  <h4>2 · How savings are computed</h4>
-                  <p>For each rail you send: <b>savings = (your cost − instant cost) × payments shifted</b>. We only count
-                    <b> outbound</b> payments (you can't control what others send you), and only the share you choose to
-                    shift. Net benefit subtracts your annual platform cost; ROI and payback compare against the one-time
-                    setup cost.</p>
+                  <h4>How savings are computed</h4>
+                  <p>Per rail: <b>savings = (your cost − instant cost) × payments shifted</b>. Only <b>outbound</b> volume
+                    counts, and only the share you choose to shift. Net benefit subtracts the annual platform cost; ROI and
+                    payback are measured against one-time setup.</p>
                 </div>
                 <div className="mcol">
-                  <h4>3 · Where the numbers come from</h4>
-                  <p>Volumes, fees and fraud figures trace to the <a href="https://www.frbservices.org/resources/financial-services/fednow/volume-value-stats" target="_blank" rel="noreferrer">Federal Reserve</a>,{" "}
+                  <h4>Where the figures come from</h4>
+                  <p>Volumes, fees and fraud rates trace to the <a href="https://www.frbservices.org/resources/financial-services/fednow/volume-value-stats" target="_blank" rel="noreferrer">Federal Reserve</a>,{" "}
                     <a href="https://www.nacha.org/content/ach-network-volume-and-value-statistics" target="_blank" rel="noreferrer">Nacha</a>,{" "}
-                    <a href="https://www.theclearinghouse.org/payment-systems/rtp" target="_blank" rel="noreferrer">The Clearing House</a> and the AFP Fraud Survey —
-                    every line on the Rail Data tab has a verify link. Anything not directly citable is labelled <b>Estimate</b>.</p>
+                    <a href="https://www.theclearinghouse.org/payment-systems/rtp" target="_blank" rel="noreferrer">The Clearing House</a> and the AFP surveys.
+                    Every line on the Data &amp; sources tab carries a verify link; anything not directly citable is
+                    labelled <b>Estimate</b>.</p>
                 </div>
                 <div className="mcol">
-                  <h4>4 · Trust check</h4>
-                  <p>The <b>Sanity check</b> card shows the total your inputs imply you spend on payments today — compare it
-                    with the ops line on your NCUA/FDIC call report. If it's in the ballpark, the estimate is grounded in
-                    your reality, not ours.</p>
+                  <h4>Reconciling to your books</h4>
+                  <p>The <b>reconciliation</b> card shows the total annual cost your inputs imply for current volume.
+                    Compare it with the payment-operations line on your NCUA or FDIC call report to confirm the model is
+                    grounded in your reality.</p>
                 </div>
               </div>
             </details>
@@ -384,22 +394,22 @@ export default function App() {
             <div className="grid onecol">
               <section className="results">
                 <div className={res.net > 0 ? "savehero" : "savehero neg"}>
-                  <div className="lbl">Estimated savings from moving outbound volume to instant</div>
-                  <div className="big">{res.net > 0 ? money(res.net) : "—"}<span> / year</span></div>
+                  <div className="lbl">Estimated annual net savings</div>
+                  <div className="big">{res.net > 0 ? money(res.net) : "—"}<span>/ year</span></div>
                   {res.net > 0 && <div className="subrow">
-                    <span>≈ <b>{money(res.net / 12)}</b>/month</span>
-                    <span>Pays back in <b>{res.payback === Infinity ? "—" : res.payback.toFixed(1)} months</b></span>
-                    <span>5-year value <b>{money(res.npv)}</b></span>
+                    <span>{money(res.net / 12)} <i>per month</i></span>
+                    <span>{res.payback === Infinity ? "—" : `${res.payback.toFixed(1)} months`} <i>payback</i></span>
+                    <span>{money(res.npv)} <i>5-year value</i></span>
                   </div>}
                 </div>
                 <div className={res.net > 0 ? "note" : "note warn"}>
                   {res.net > 0
-                    ? <>Instant costs about <b>{money2(res.instant)}</b> per transaction all-in. Biggest win: <b>{topSaver.rail}</b> ({money(topSaver.ann)}/yr). Checks and wires drive it; standard ACH is already cheaper than instant.</>
-                    : <>⚠️ At these numbers the migration doesn't pay back yet. Increase outbound check/wire volume or the % shifted, or lower setup cost.</>}
+                    ? <>Instant costs about <b>{money2(res.instant)}</b> per transaction all-in. The largest single contributor is <b>{topSaver.rail}</b> at <b>{money(topSaver.ann)}</b> a year. Checks and wires drive the result; standard ACH is already cheaper than instant and is not recommended for migration.</>
+                    : <>At these inputs the migration does not pay back. Increase outbound check or wire volume, raise the share shifted, or revise the one-time setup cost.</>}
                 </div>
 
                 <div className="metrics3">
-                  <div className="metric"><span>Year-1 ROI</span><b>{Math.round(res.roi * 100)}%</b></div>
+                  <div className="metric"><span>First-year ROI</span><b>{Math.round(res.roi * 100)}%</b></div>
                   <div className="metric"><span>Gross savings</span><b>{money(res.gross)}</b></div>
                   <div className="metric"><span>Annual platform cost</span><b>{money(annual)}</b></div>
                 </div>
@@ -407,7 +417,10 @@ export default function App() {
                 <SegmentBreakdown result={res} segCosts={segCosts} volBySeg={volBySeg} />
 
                 <div className="card chart">
-                  <h3>Cost per transaction — by layer (network · provider · your own) — <span style={{ color: SEG_META[activeSegment].color }}>{SEG_META[activeSegment].label}</span></h3>
+                  <div className="cardhead">
+                    <h3>Cost per transaction by layer</h3>
+                    <span className="cardnote">Network · provider · internal — <b style={{ color: SEG_META[activeSegment].color }}>{SEG_META[activeSegment].label}</b> segment</span>
+                  </div>
                   <div className="segtabs inline">
                     {SEGMENTS.map((s) => (
                       <button key={s} className={activeSegment === s ? "on" : ""} onClick={() => setActiveSegment(s)}
@@ -429,7 +442,10 @@ export default function App() {
                 </div>
 
                 <div className="card chart">
-                  <h3>Where your savings come from (per year)</h3>
+                  <div className="cardhead">
+                    <h3>Where the savings come from</h3>
+                    <span className="cardnote">Per year, by rail</span>
+                  </div>
                   <ResponsiveContainer width="100%" height={210}>
                     <BarChart data={savings} layout="vertical" margin={{ left: 8, right: 90, top: 4, bottom: 4 }}>
                       <XAxis type="number" hide /><YAxis type="category" dataKey="name" width={100} tickLine={false} axisLine={false} />
@@ -443,22 +459,61 @@ export default function App() {
                 </div>
 
                 <div className="card sanity">
-                  <h3>Sanity check</h3>
-                  <p>Your inputs imply it costs about <b>{money(implied)}/year</b> to support your current outbound checks, wires &amp; ACH.
-                    Compare that to your books (payment-operations line on your <a href={GROUNDING_SRC.url} target="_blank" rel="noreferrer">NCUA/FDIC call report</a>). If it's in the ballpark, your assumptions are sound; if not, adjust the cost inputs on the Assumptions tab.</p>
+                  <h3>Reconciliation against your books</h3>
+                  <p>These inputs imply roughly <b>{money(implied)} per year</b> to support current outbound checks, wires
+                    and ACH. Compare that with the payment-operations line on your{" "}
+                    <a href={GROUNDING_SRC.url} target="_blank" rel="noreferrer">NCUA or FDIC call report</a>. If it lands in
+                    the same range the assumptions hold; if not, adjust the cost inputs on the Cost assumptions tab.</p>
                 </div>
 
                 <div className="card">
-                  <h3>Detail by rail</h3>
-                  <table className="tbl">
-                    <thead><tr><th>Rail</th><th>Your cost $/txn</th><th>Save $/txn</th><th>Sent instantly</th><th>Savings / yr</th></tr></thead>
-                    <tbody>
-                      {res.rows.map((r) => (
-                        <tr key={r.rail}><td>{r.rail}</td><td>{money2(r.legacy)}</td>
-                          <td className={r.per < 0 ? "neg" : ""}>{money2(r.per)}</td><td>{num(r.migrated)}</td><td>{money(r.ann)}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="cardhead">
+                    <h3>Detail by rail</h3>
+                    <span className="cardnote">Blended across all customer segments</span>
+                  </div>
+                  <div className="tablewrap">
+                    <table className="dtbl">
+                      <colgroup><col style={{ width: "24%" }} /><col /><col /><col /><col /></colgroup>
+                      <thead>
+                        <tr>
+                          <th scope="col">Rail</th>
+                          <th scope="col" className="n">Your cost / txn</th>
+                          <th scope="col" className="n">Saved / txn</th>
+                          <th scope="col" className="n">Payments migrated</th>
+                          <th scope="col" className="n">Savings / yr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {res.rows.map((r) => (
+                          <tr key={r.rail}>
+                            <th scope="row"><span className="railname"><i className="raildot" style={{ background: RAIL_COLOR[r.rail] }} />{r.rail === "ACH" ? "Standard ACH" : r.rail}</span></th>
+                            <td className="n">{money2(r.legacy)}</td>
+                            <td className={"n" + (r.per < 0 ? " negval" : "")}>{money2(r.per)}</td>
+                            <td className="n">{num(r.migrated)}</td>
+                            <td className={"n strong" + (r.ann < 0 ? " negval" : "")}>{money(r.ann)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <th scope="row">Gross total</th>
+                          <td className="n">—</td><td className="n">—</td>
+                          <td className="n">{num(res.rows.reduce((s, r) => s + r.migrated, 0))}</td>
+                          <td className="n strong">{money(res.gross)}</td>
+                        </tr>
+                        <tr className="sub">
+                          <th scope="row">Less annual platform cost</th>
+                          <td className="n">—</td><td className="n">—</td><td className="n">—</td>
+                          <td className="n">−{money(annual)}</td>
+                        </tr>
+                        <tr className="grand">
+                          <th scope="row">Net annual savings</th>
+                          <td className="n">—</td><td className="n">—</td><td className="n">—</td>
+                          <td className="n strong">{money(res.net)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               </section>
             </div>
@@ -469,43 +524,86 @@ export default function App() {
         {tab === "td" && (
           <div className="grid">
             <section className="card inputs">
-              <h2>Enter what you already know</h2>
-              <p className="hint">Most banks don't know their per-check cost — but they know their totals. Enter aggregate numbers from your books; we allocate them across rails using our researched weights.</p>
-              <label className="fld"><span>Total labor to support payments ($/yr)</span><NumberInput value={tdLabor} onChange={setTdLabor} /></label>
-              <label className="fld"><span>Total fraud losses ($/yr)</span><NumberInput value={tdFraud} onChange={setTdFraud} /></label>
+              <h2>Aggregate figures from your books</h2>
+              <p className="hint">Most institutions can't state a per-check cost, but they know their totals. Enter the
+                aggregates and the model allocates them across rails by researched intensity.</p>
+              <label className="fld"><span>Total labor to support payments ($ / yr)</span><NumberInput value={tdLabor} onChange={setTdLabor} /></label>
+              <label className="fld"><span>Total fraud losses ($ / yr)</span><NumberInput value={tdFraud} onChange={setTdFraud} /></label>
+
               <h2>Payments per year, by rail</h2>
               {RAILS.map((r) => (
                 <label className="fld" key={r}><span>{r === "ACH" ? "Standard ACH" : r}</span>
                   <NumberInput value={tdCount[r]} onChange={(v) => setTdCount({ ...tdCount, [r]: v })} /></label>
               ))}
 
-              <h2>Network fee per item ($) — enter your own</h2>
-              <p className="hint">Pre-filled with published rail fees (FedNow/RTP $0.045, Fedwire ~$0.78). Overwrite each with the exact fee your processor charges — these feed the calculation directly.</p>
+              <h2>Network fee per item</h2>
+              <p className="hint">Pre-filled with published fee schedules (FedNow and RTP $0.045, Fedwire about $0.78).
+                Overwrite each with the exact fee your processor charges.</p>
               {RAILS.map((r) => (
-                <label className="fld" key={r}><span>{r === "ACH" ? "Standard ACH" : r} network fee ($/item)</span>
+                <label className="fld" key={r}><span>{r === "ACH" ? "Standard ACH" : r} ($ / item)</span>
                   <input type="number" step="0.001" value={tdNet[r]} onChange={(e) => setTdNet({ ...tdNet, [r]: +e.target.value })} /></label>
               ))}
-              <p className="hint">Example pre-loaded from Payfinia's illustration ($10M labor, $500k fraud; 40M ACH, 100k wires, 1M checks).</p>
             </section>
             <section className="results">
               <div className="savehero">
-                <div className="lbl">Total cost to support payments (from your totals)</div>
+                <div className="lbl">Total annual cost to support payments</div>
                 <div className="big">{money(td.grand)}</div>
-                <div className="subrow"><span>Labor <b>{money(tdLabor)}</b></span><span>Network <b>{money(td.totNet)}</b></span><span>Fraud <b>{money(tdFraud)}</b></span></div>
+                <div className="subrow">
+                  <span>{money(tdLabor)} <i>labor</i></span>
+                  <span>{money(td.totNet)} <i>network</i></span>
+                  <span>{money(tdFraud)} <i>fraud</i></span>
+                </div>
               </div>
-              <div className="note">We work the left side of the equation: network fees are exact (rate × count); your total labor and fraud are split across rails by each rail's researched intensity × volume — a wire carries far more labor per item than an ACH, but every piece sums back to your real totals.</div>
+              <div className="note">Network fees are exact — rate × count. Total labor and fraud are allocated across rails
+                by each rail's researched intensity × volume, so a wire carries far more labor per item than an ACH while
+                every component still sums back to your reported totals.</div>
               <div className="card">
-                <h3>Cost breakdown by rail</h3>
-                <table className="tbl">
-                  <thead><tr><th>Rail</th><th>Count</th><th>Labor</th><th>Network</th><th>Fraud</th><th>Total</th><th>$/txn</th></tr></thead>
-                  <tbody>
-                    {td.rows.filter((r) => r.count > 0).map((r) => (
-                      <tr key={r.rail}><td className="rl">{r.rail}</td><td>{num(r.count)}</td><td>{money(r.labor)}</td>
-                        <td>{money(r.network)}</td><td>{money(r.fraud)}</td><td><b>{money(r.totalCost)}</b></td><td>{money2(r.perTxn)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="fine">The "$/txn" here is your OWN cost per transaction — derived from your real totals, not our assumptions.</p>
+                <div className="cardhead">
+                  <h3>Cost breakdown by rail</h3>
+                  <span className="cardnote">Derived from your totals</span>
+                </div>
+                <div className="tablewrap">
+                  <table className="dtbl">
+                    <colgroup><col style={{ width: "18%" }} /><col /><col /><col /><col /><col /><col /></colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">Rail</th>
+                        <th scope="col" className="n">Count</th>
+                        <th scope="col" className="n">Labor</th>
+                        <th scope="col" className="n">Network</th>
+                        <th scope="col" className="n">Fraud</th>
+                        <th scope="col" className="n">Total</th>
+                        <th scope="col" className="n">$ / txn</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {td.rows.filter((r) => r.count > 0).map((r) => (
+                        <tr key={r.rail}>
+                          <th scope="row"><span className="railname"><i className="raildot" style={{ background: RAIL_COLOR[r.rail] }} />{r.rail === "ACH" ? "Standard ACH" : r.rail}</span></th>
+                          <td className="n">{num(r.count)}</td>
+                          <td className="n">{money(r.labor)}</td>
+                          <td className="n">{money(r.network)}</td>
+                          <td className="n">{money(r.fraud)}</td>
+                          <td className="n strong">{money(r.totalCost)}</td>
+                          <td className="n">{money2(r.perTxn)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="grand">
+                        <th scope="row">Total</th>
+                        <td className="n">{num(td.rows.reduce((s, r) => s + r.count, 0))}</td>
+                        <td className="n">{money(tdLabor)}</td>
+                        <td className="n">{money(td.totNet)}</td>
+                        <td className="n">{money(tdFraud)}</td>
+                        <td className="n strong">{money(td.grand)}</td>
+                        <td className="n">—</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <p className="fine">The $/txn column is your own cost per transaction, derived from your reported totals
+                  rather than published benchmarks.</p>
               </div>
             </section>
           </div>
@@ -514,17 +612,29 @@ export default function App() {
         {/* ============ RAIL DATA ============ */}
         {tab === "data" && (
           <div className="datawrap">
-            <p className="lead">Real figures for each rail — every statistic states the number, the year, and links to the publisher.</p>
+            <p className="lead">Published figures for each rail. Every statistic states the value, the year and the
+              publisher, with a link to verify it at source.</p>
             {RAILS.map((rail) => (
               <div className="card railcard" key={rail}>
-                <h3><span className="dot" style={{ background: RAIL_COLOR[rail] }} />{rail === "Instant" ? "Instant Payments (FedNow & RTP)" : rail}
+                <h3><span className="dot" style={{ background: RAIL_COLOR[rail] }} />{rail === "Instant" ? "Instant payments — FedNow & RTP" : rail === "ACH" ? "Standard ACH" : rail}
                   {rail === "Instant" && <span className="badge">migration target</span>}</h3>
-                <table className="tbl">
-                  <thead><tr><th>Metric</th><th>Value / figure</th><th>As of</th><th>Publisher</th><th></th></tr></thead>
-                  <tbody>{RAIL_FACTS[rail].map(([m, v, y, p, url], i) => (
-                    <tr key={i}><td>{m}</td><td>{v}</td><td>{y}</td><td>{p}</td><td><a href={url} target="_blank" rel="noreferrer">verify ↗</a></td></tr>))}
-                  </tbody>
-                </table>
+                <div className="tablewrap">
+                  <table className="dtbl">
+                    <colgroup><col style={{ width: "18%" }} /><col style={{ width: "42%" }} /><col style={{ width: "10%" }} /><col style={{ width: "22%" }} /><col style={{ width: "8%" }} /></colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">Metric</th><th scope="col">Value</th>
+                        <th scope="col">As of</th><th scope="col">Publisher</th><th scope="col" className="n">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>{RAIL_FACTS[rail].map(([m, v, y, p, url], i) => (
+                      <tr key={i}>
+                        <th scope="row">{m}</th><td>{v}</td><td className="nowrap">{y}</td><td>{p}</td>
+                        <td className="n"><a href={url} target="_blank" rel="noreferrer">verify ↗</a></td>
+                      </tr>))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ))}
           </div>
@@ -533,8 +643,17 @@ export default function App() {
         {/* ============ WHY MIGRATE ============ */}
         {tab === "why" && (
           <div className="datawrap">
-            <p className="lead">The case for moving each rail to instant — pulled live from your cost assumptions, so it stays honest if you edit them. Standard ACH is intentionally flagged “keep,” because it's already cheaper than instant.</p>
-            <WhyMigrate costs={costs} />
+            <p className="lead">The case for moving each rail, computed live from the cost assumptions for the selected
+              customer segment. Standard ACH is normally flagged “keep” because it is already cheaper per item than instant.</p>
+            <div className="segtabs">
+              {SEGMENTS.map((s) => (
+                <button key={s} className={activeSegment === s ? "on" : ""} onClick={() => setActiveSegment(s)}
+                  style={activeSegment === s ? { borderColor: SEG_META[s].color, color: SEG_META[s].color } : undefined}>
+                  {SEG_META[s].label}
+                </button>
+              ))}
+            </div>
+            <WhyMigrate costs={costs} ov={overrides[activeSegment]} segment={activeSegment} />
           </div>
         )}
 
@@ -554,8 +673,13 @@ export default function App() {
       </main>
 
       <footer className="wrap">
-        Payfinia · USF FinTech Graduate Project · Cost = Network + Provider + FI internal, costed per customer segment ·
-        Migration = outbound volume you originate · Figures current as of the 2026 research pass · Estimate, not a guarantee.
+        <div className="footrow">
+          <span><b>Payfinia</b> · Instant Payments ROI Model</span>
+          <span>Cost = network + provider + internal, costed per customer segment</span>
+          <span>Migration applies to outbound volume you originate</span>
+          <span>Figures current as of the 2026 research pass</span>
+        </div>
+        <p className="footfine">Estimate for discussion. Not a guarantee of savings.</p>
       </footer>
       <ChatAssistant onApply={applyFromAssistant} />
     </div>
@@ -563,15 +687,15 @@ export default function App() {
   );
 }
 
-// ---------- open methodology flags: shown, not hidden ----------
+// ---------- model limitations: disclosed rather than hidden ----------
 function MethodFlags({ open, setOpen }) {
   const high = METHOD_FLAGS.filter((f) => f.severity === "high").length;
   return (
     <div className={"flagbox" + (open ? " open" : "")}>
       <button className="flaghead" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="flagdot" />
-        <b>{METHOD_FLAGS.length} open methodology flags</b>
-        <span className="flagsub">{high} need resolving before this goes to a client — for Nizar's cost-component review</span>
+        <b>Model limitations ({METHOD_FLAGS.length})</b>
+        <span className="flagsub">{high} material, pending calibration against production data</span>
         <span className="flagcaret">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
@@ -637,23 +761,25 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
   return (
     <div className="datawrap">
       <details className="method">
-        <summary>How to use this tab — read once</summary>
+        <summary>How to use this tab</summary>
         <div className="methodbody">
-          <div className="mcol"><h4>1 · Pick a rail</h4><p>Choose a payment type up top. Its cost per transaction shows split into <b>Network</b>, <b>Provider</b> (Instant only — Payfinia doesn't charge on your legacy rails) and your <b>Internal</b> cost.</p></div>
-          <div className="mcol"><h4>2 · Build from what you know</h4><p>Use the <b>Cost Builder</b> on the left to turn figures you have (staff × salary, fraud $, failed items) into a per-item cost, then hit <b>Apply</b>. All values are <b>$ per transaction</b> unless marked “rate.”</p></div>
-          <div className="mcol"><h4>3 · Apply to all rails</h4><p>The <b>⇊ all</b> button next to any value copies it to every rail at once — handy for a fee that's identical everywhere, so you don't retype it five times.</p></div>
-          <div className="mcol"><h4>4 · Or override the total</h4><p>If you already know your true all-in cost for a rail, type it into <b>Override total</b> at the bottom of the stack — the calculator uses that number and every result updates automatically.</p></div>
+          <div className="mcol"><h4>Pick a segment and rail</h4><p>Cost per transaction is shown split into <b>network</b>, <b>provider</b> (instant only) and <b>internal</b> layers, for the segment you select.</p></div>
+          <div className="mcol"><h4>Build from what you know</h4><p>The <b>cost builder</b> turns figures you have — staff × salary, fraud dollars, failed items — into a per-item cost. Values are <b>$ per transaction</b> unless marked “rate.”</p></div>
+          <div className="mcol"><h4>Copy a value across</h4><p><b>⇊ rails</b> applies a value to every rail in the current segment. <b>⇉ segs</b> applies it to the same rail across all three segments.</p></div>
+          <div className="mcol"><h4>Or override the total</h4><p>If you already know your true all-in cost for a rail, enter it under <b>override total</b>. The model uses that figure directly and every result updates.</p></div>
         </div>
       </details>
-      <p className="lead">Cost per transaction, split into <b>3 layers</b>: the <b style={{ color: L1 }}>network</b> charges, the <b style={{ color: L2 }}>provider (Payfinia, Instant only)</b> charge, and your <b style={{ color: L3 }}>own internal</b> cost. All values are <b>$ per transaction</b> unless marked “rate.” Build the internal numbers from figures you actually have — or override the total outright.</p>
+      <p className="lead">Cost per transaction, split into three layers: <b style={{ color: L1 }}>network</b> charges,
+        the <b style={{ color: L2 }}>provider</b> charge (instant only), and your <b style={{ color: L3 }}>internal</b> cost.
+        Build the internal figures from data you hold, or override the all-in total outright.</p>
 
       {/* ---- segment selector: the modular structure, made explicit ---- */}
       <div className="card segpicker">
         <div className="segpickrow">
           <div>
-            <h3>1 · Which customer segment are you costing?</h3>
-            <p className="fine">Each segment carries its own internal cost stack. Network and provider fees are the same
-              across segments — the Fed and TCH charge the FI the same per-item fee regardless of who the payment is for.</p>
+            <h3>Customer segment</h3>
+            <p className="fine">Each segment carries its own internal cost stack. Network and provider fees are identical
+              across segments — the Fed and TCH charge the same per-item fee regardless of who the payment is for.</p>
           </div>
           <div className="segtabs big">
             {SEGMENTS.map((s) => (
@@ -677,88 +803,108 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
           </div>
         )}
         {seg === "Internal" && (
-          <p className="fine warnline">⚠ No public dataset breaks out a financial institution's own-account cost per item.
-            Every figure in this segment is an <b>Estimate</b> and a calibration target — not evidence.</p>
+          <p className="fine warnline">No public dataset breaks out a financial institution's own-account cost per item.
+            Every figure in this segment is an <b>estimate</b> and a calibration target rather than evidence.</p>
         )}
       </div>
 
       <div className="assumgrid">
         <div className="card assum-stack">
-          <h3>2 · Cost stack — <span style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</span> · {rail}</h3>
-          <label className="fld"><span>Choose a rail</span>
-            <select value={rail} onChange={(e) => setRail(e.target.value)}>{RAILS.map((r) => <option key={r}>{r}</option>)}</select></label>
+          <div className="cardhead">
+            <h3>Cost stack</h3>
+            <span className="cardnote"><b style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</b> · {rail === "ACH" ? "Standard ACH" : rail}</span>
+          </div>
+          <label className="fld"><span>Rail</span>
+            <select value={rail} onChange={(e) => setRail(e.target.value)}>
+              {RAILS.map((r) => <option key={r} value={r}>{r === "ACH" ? "Standard ACH" : r}</option>)}
+            </select></label>
           {src && (
             <p className="srcline">
               <StatusTag status={src.status} /> {src.basis}{" "}
               <a href={src.url} target="_blank" rel="noreferrer">verify ↗</a>
             </p>
           )}
-          <table className="tbl small">
-            <thead><tr><th>Layer</th><th>Component</th><th>Value</th></tr></thead>
-            <tbody>
-              {COMP_FIELDS.filter((f) => f.key !== "provider" || rail === "Instant").map((f) => (
-                <tr key={f.key} className={f.perSegment ? "" : "shared"}>
-                  <td><span className="layerpill" style={{ background: (f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3) + "22", color: f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3 }}>{f.layer}</span></td>
-                  <td>{f.label}{!f.perSegment && <em className="sharedtag" title="Same across all three segments">shared</em>}</td>
-                  <td><span className="valwrap">
-                    {f.kind === "$" && <span className="pfx">$</span>}
-                    <input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
-                      onChange={(e) => setComp(seg, rail, f.key, +e.target.value)} style={{ width: 76 }} />
-                    {f.kind === "%" && <span className="sfx">rate</span>}
-                    <button className="applyall" title={`Apply this ${f.label} to every rail in ${SEG_META[seg].label}`} onClick={() => applyToAllRails(seg, f.key, c[f.key])}>⇊ rails</button>
-                    <button className="applyall alt" title={`Apply this ${f.label} for ${rail} to all three segments`} onClick={() => applyToAllSegments(rail, f.key, c[f.key])}>⇉ segs</button>
-                  </span></td>
-                </tr>
-              ))}
-              <tr><td colSpan="2" className="rl">Layer totals →</td>
-                <td className="tot">{money2(railTotal(c))}</td></tr>
-            </tbody>
-          </table>
-          <p className="fine"><b style={{ color: L1 }}>Network</b> {money2(layers.network)} · {rail === "Instant" && <><b style={{ color: L2 }}>Provider</b> {money2(layers.provider)} · </>}<b style={{ color: L3 }}>Internal</b> {money2(layers.internal)} = <b>{money2(railTotal(c))}</b>/txn</p>
+          <div className="tablewrap">
+            <table className="dtbl compact">
+              <colgroup><col style={{ width: "22%" }} /><col /><col style={{ width: "42%" }} /></colgroup>
+              <thead><tr><th scope="col">Layer</th><th scope="col">Component</th><th scope="col" className="n">Value</th></tr></thead>
+              <tbody>
+                {COMP_FIELDS.filter((f) => f.key !== "provider" || rail === "Instant").map((f) => (
+                  <tr key={f.key} className={f.perSegment ? "" : "shared"}>
+                    <td><span className="layerpill" style={{ background: (f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3) + "1a", color: f.layer === "Network" ? L1 : f.layer === "Provider" ? L2 : L3 }}>{f.layer}</span></td>
+                    <th scope="row">{f.label}{!f.perSegment && <em className="sharedtag" title="Identical across all three segments">shared</em>}</th>
+                    <td className="n"><span className="valwrap">
+                      {f.kind === "$" && <span className="pfx">$</span>}
+                      <input type="number" step={f.kind === "%" ? "0.001" : "0.01"} value={c[f.key]}
+                        onChange={(e) => setComp(seg, rail, f.key, +e.target.value)} />
+                      {f.kind === "%" && <span className="sfx">rate</span>}
+                      <button className="applyall" title={`Apply this ${f.label} to every rail in ${SEG_META[seg].label}`} onClick={() => applyToAllRails(seg, f.key, c[f.key])}>⇊ rails</button>
+                      <button className="applyall alt" title={`Apply this ${f.label} for ${rail} to all three segments`} onClick={() => applyToAllSegments(rail, f.key, c[f.key])}>⇉ segs</button>
+                    </span></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="grand"><th scope="row" colSpan="2">All-in cost per transaction</th>
+                  <td className="n strong">{money2(railTotal(c))}</td></tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="fine layersum">
+            <span><i style={{ background: L1 }} />Network {money2(layers.network)}</span>
+            {rail === "Instant" && <span><i style={{ background: L2 }} />Provider {money2(layers.provider)}</span>}
+            <span><i style={{ background: L3 }} />Internal {money2(layers.internal)}</span>
+          </p>
 
           {/* side-by-side so the segment differential is visible at a glance */}
-          <table className="tbl small segcompare">
-            <thead><tr><th>{rail} all-in</th>{SEGMENTS.map((s) => <th key={s}>{SEG_META[s].label}</th>)}</tr></thead>
-            <tbody>
-              <tr>
-                <td className="rl">$ / txn</td>
-                {SEGMENTS.map((s) => (
-                  <td key={s} className={s === seg ? "here" : ""} style={{ color: SEG_META[s].color, fontWeight: s === seg ? 700 : 500 }}>
-                    {money2(railTotal(segCosts[s][rail]))}
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
+          <div className="tablewrap">
+            <table className="dtbl compact segcompare">
+              <thead><tr><th scope="col">{rail === "ACH" ? "Standard ACH" : rail} all-in</th>{SEGMENTS.map((s) => <th key={s} className="n">{SEG_META[s].label}</th>)}</tr></thead>
+              <tbody>
+                <tr>
+                  <th scope="row">$ per transaction</th>
+                  {SEGMENTS.map((s) => (
+                    <td key={s} className={"n" + (s === seg ? " here" : "")} style={{ color: SEG_META[s].color, fontWeight: s === seg ? 700 : 500 }}>
+                      {money2(railTotal(segCosts[s][rail]))}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <div className="overridebox">
             <label className="fld" style={{ marginBottom: 6 }}>
-              <span>Override total $/txn for {SEG_META[seg].label} · {rail} <em>(optional — use your own all-in number)</em></span>
+              <span>Override all-in $ / txn <em>optional</em></span>
               <span className="valwrap"><span className="pfx">$</span>
                 <input type="number" step="0.01" value={ovVal} placeholder={railTotal(c).toFixed(2)}
-                  onChange={(e) => setOverride(seg, rail, e.target.value)} style={{ width: 110 }} /></span>
+                  onChange={(e) => setOverride(seg, rail, e.target.value)} style={{ width: 120 }} /></span>
             </label>
             {ovActive
-              ? <p className="fine ovon">✓ Using your override of <b>{money2(+ovVal)}</b>/txn for {SEG_META[seg].label} · {rail} — the stack above is ignored. <button type="button" className="linkbtn" onClick={() => setOverride(seg, rail, "")}>Clear override</button></p>
-              : <p className="fine">Leave blank to use the built-up stack ({money2(railTotal(c))}/txn).</p>}
+              ? <p className="fine ovon">Using your override of <b>{money2(+ovVal)}</b> / txn for {SEG_META[seg].label} · {rail} — the stack above is ignored. <button type="button" className="linkbtn" onClick={() => setOverride(seg, rail, "")}>Clear override</button></p>
+              : <p className="fine">Leave blank to use the built-up stack ({money2(railTotal(c))} / txn).</p>}
           </div>
         </div>
 
         <div className="card assum-builder">
-          <h3>3 · Cost Builder — <span style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</span> · {rail}</h3>
-          <p className="fine">You probably can't say "$2.00 per business check" off the top of your head — but you know these.
-            Item counts are pre-filled with this segment's share of {rail} volume ({num(segVol[rail] || 0)}/yr). Compute, then apply.</p>
+          <div className="cardhead">
+            <h3>Cost builder</h3>
+            <span className="cardnote"><b style={{ color: SEG_META[seg].color }}>{SEG_META[seg].label}</b> · {rail === "ACH" ? "Standard ACH" : rail}</span>
+          </div>
+          <p className="fine">Few institutions can state a per-item cost directly, but these inputs are known. Item counts
+            are pre-filled with this segment's share of {rail === "ACH" ? "standard ACH" : rail} volume
+            ({num(segVol[rail] || 0)} / yr). Compute, then apply.</p>
 
           <div className="minicalc primary">
             <b>Processing / labor</b>
             <p className="mc-note">
-              Headcount × salary alone overstates cost — those people don't work on one rail all day. Enter the
-              <b> share of their time</b> that actually goes to {rail} for {SEG_META[seg].label.toLowerCase()} customers.
+              Headcount × salary alone overstates cost — staff don't work a single rail all day. Enter the
+              <b> share of their time</b> that goes to {rail === "ACH" ? "standard ACH" : rail} for {SEG_META[seg].label.toLowerCase()} customers.
             </p>
-            <div className="mc-row"><label>Staff (FTE) touching {rail}</label><input type="number" step="0.1" value={fte} onChange={(e) => setFte(+e.target.value)} /></div>
+            <div className="mc-row"><label>Staff (FTE) touching this rail</label><input type="number" step="0.1" value={fte} onChange={(e) => setFte(+e.target.value)} /></div>
             <div className="mc-row"><label>Avg base salary ($/yr)</label><NumberInput value={salary} onChange={setSalary} /></div>
             <div className="mc-row highlight">
-              <label>% of their time on this rail × segment</label>
+              <label>Share of time on this rail &amp; segment</label>
               <span className="pctwrap">
                 <input type="range" min="0" max="100" value={pctTime} onChange={(e) => setPctTime(+e.target.value)} />
                 <input type="number" min="0" max="100" value={pctTime} onChange={(e) => setPctTime(+e.target.value)} style={{ width: 58 }} />
@@ -769,7 +915,7 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
               <label>Load salary with benefits &amp; overhead (×{LOADED_SALARY_MULT})</label>
               <input type="checkbox" checked={loaded} onChange={(e) => setLoaded(e.target.checked)} />
             </div>
-            <div className="mc-row"><label>{rail}s handled / yr ({SEG_META[seg].label})</label><NumberInput value={items} onChange={setItems} /></div>
+            <div className="mc-row"><label>Items handled / yr</label><NumberInput value={items} onChange={setItems} /></div>
             <div className="mc-out">
               = <b>{money2(procPer)}</b> / item
               <button onClick={() => setComp(seg, rail, "processing", +procPer.toFixed(4))}>Apply</button>
@@ -788,39 +934,39 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
 
           <div className="minicalc">
             <b>Fraud loss</b>
-            <div className="mc-row"><label>Total fraud $ on {rail} / yr ({SEG_META[seg].label})</label><NumberInput value={fraudUsd} onChange={setFraudUsd} /></div>
-            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fItems} onChange={setFItems} /></div>
+            <div className="mc-row"><label>Total fraud losses / yr ($)</label><NumberInput value={fraudUsd} onChange={setFraudUsd} /></div>
+            <div className="mc-row"><label>Items / yr</label><NumberInput value={fItems} onChange={setFItems} /></div>
             <div className="mc-out">= <b>{money2(fraudPer)}</b> / item <button onClick={() => setComp(seg, rail, "fraud_loss", +fraudPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Fraud prevention (screening &amp; tools)</b>
-            <div className="mc-row"><label>Fraud tools + staff ($/yr) on {rail}</label><NumberInput value={fpUsd} onChange={setFpUsd} /></div>
-            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={fpItems} onChange={setFpItems} /></div>
+            <div className="mc-row"><label>Fraud tools &amp; staff / yr ($)</label><NumberInput value={fpUsd} onChange={setFpUsd} /></div>
+            <div className="mc-row"><label>Items / yr</label><NumberInput value={fpItems} onChange={setFpItems} /></div>
             <div className="mc-out">= <b>{money2(fpPer)}</b> / item <button onClick={() => setComp(seg, rail, "fraud_prevention", +fpPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Compliance (AML / BSA)</b>
-            <div className="mc-row"><label>AML/BSA &amp; OFAC cost ($/yr) on {rail}</label><NumberInput value={amlUsd} onChange={setAmlUsd} /></div>
-            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={amlItems} onChange={setAmlItems} /></div>
+            <div className="mc-row"><label>AML, BSA &amp; OFAC cost / yr ($)</label><NumberInput value={amlUsd} onChange={setAmlUsd} /></div>
+            <div className="mc-row"><label>Items / yr</label><NumberInput value={amlItems} onChange={setAmlItems} /></div>
             <div className="mc-out">= <b>{money2(amlPer)}</b> / item <button onClick={() => setComp(seg, rail, "compliance", +amlPer.toFixed(4))}>Apply</button></div>
           </div>
 
           <div className="minicalc">
             <b>Reconciliation</b>
-            <p className="mc-note">Same time-allocation logic as processing — recon staff split across rails too.</p>
+            <p className="mc-note">Same time-allocation logic as processing — reconciliation staff are split across rails too.</p>
             <div className="mc-row"><label>Recon staff (FTE)</label><input type="number" step="0.1" value={recFte} onChange={(e) => setRecFte(+e.target.value)} /></div>
             <div className="mc-row"><label>Avg base salary ($/yr)</label><NumberInput value={recSalary} onChange={setRecSalary} /></div>
             <div className="mc-row highlight">
-              <label>% of their time on this rail × segment</label>
+              <label>Share of time on this rail &amp; segment</label>
               <span className="pctwrap">
                 <input type="range" min="0" max="100" value={recPctTime} onChange={(e) => setRecPctTime(+e.target.value)} />
                 <input type="number" min="0" max="100" value={recPctTime} onChange={(e) => setRecPctTime(+e.target.value)} style={{ width: 58 }} />
                 <span className="sfx">%</span>
               </span>
             </div>
-            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={recItems} onChange={setRecItems} /></div>
+            <div className="mc-row"><label>Items / yr</label><NumberInput value={recItems} onChange={setRecItems} /></div>
             <div className="mc-out">= <b>{money2(recPer)}</b> / item <button onClick={() => setComp(seg, rail, "reconciliation", +recPer.toFixed(4))}>Apply</button></div>
           </div>
 
@@ -828,24 +974,40 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
             <b>Liquidity / prefunding</b>
             <div className="mc-row"><label>Avg prefunded balance ($)</label><NumberInput value={liqBal} onChange={setLiqBal} /></div>
             <div className="mc-row"><label>Cost of funds (% / yr)</label><input type="number" step="0.1" value={liqRate} onChange={(e) => setLiqRate(+e.target.value)} /></div>
-            <div className="mc-row"><label>{rail}s / yr</label><NumberInput value={liqItems} onChange={setLiqItems} /></div>
+            <div className="mc-row"><label>Items / yr</label><NumberInput value={liqItems} onChange={setLiqItems} /></div>
             <div className="mc-out">= <b>{money2(liqPer)}</b> / item <button onClick={() => setComp(seg, rail, "liquidity", +liqPer.toFixed(4))}>Apply</button></div>
           </div>
         </div>
       </div>
 
       <div className="card">
-        <h3>Sources for each cost line</h3>
-        <table className="tbl">
-          <thead><tr><th>Layer</th><th>Cost line</th><th>Supports / how to get it</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {Object.entries(SRC).map(([k, v]) => (
-              <tr key={k}><td><span className="layerpill" style={{ background: (v.layer === "Network" ? L1 : v.layer === "Provider" ? L2 : L3) + "22", color: v.layer === "Network" ? L1 : v.layer === "Provider" ? L2 : L3 }}>{v.layer}</span></td>
-                <td>{k}</td><td>{v.supports}</td><td><StatusTag status={v.status} /></td><td><a href={v.url} target="_blank" rel="noreferrer">open ↗</a></td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="fine">Default internal costs are grounded in <a href={GROUNDING_SRC.url} target="_blank" rel="noreferrer">{GROUNDING_SRC.publisher}</a> — replace with your own via the Cost Builder above.</p>
+        <div className="cardhead">
+          <h3>Sources for each cost line</h3>
+          <span className="cardnote">Where the default came from, and how to replace it</span>
+        </div>
+        <div className="tablewrap">
+          <table className="dtbl">
+            <colgroup><col style={{ width: "12%" }} /><col style={{ width: "20%" }} /><col /><col style={{ width: "13%" }} /><col style={{ width: "8%" }} /></colgroup>
+            <thead>
+              <tr>
+                <th scope="col">Layer</th><th scope="col">Cost line</th><th scope="col">Basis</th>
+                <th scope="col">Status</th><th scope="col" className="n">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(SRC).map(([k, v]) => (
+                <tr key={k}>
+                  <td><span className="layerpill" style={{ background: (v.layer === "Network" ? L1 : v.layer === "Provider" ? L2 : L3) + "1a", color: v.layer === "Network" ? L1 : v.layer === "Provider" ? L2 : L3 }}>{v.layer}</span></td>
+                  <th scope="row">{k}</th>
+                  <td>{v.supports}</td>
+                  <td><StatusTag status={v.status} /></td>
+                  <td className="n"><a href={v.url} target="_blank" rel="noreferrer">open ↗</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="fine">Default internal costs are grounded in <a href={GROUNDING_SRC.url} target="_blank" rel="noreferrer">{GROUNDING_SRC.publisher}</a>. Replace them with your own figures using the cost builder above.</p>
       </div>
     </div>
   );

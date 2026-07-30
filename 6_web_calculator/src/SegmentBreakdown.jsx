@@ -1,16 +1,14 @@
 // =====================================================================
-// SegmentBreakdown — shows the modular result: each customer segment is
-// costed independently, then aggregated.
-//
-// Nizar Jamal, 2026-07-28: "restructure the calculator into a modular format
-// where cost components for different segments (Retail, Business, Internal)
-// can be calculated independently and then aggregated."
+// SegmentBreakdown — each customer segment is costed independently on its own
+// stack, then aggregated. Shows which segment the savings actually come from.
 // =====================================================================
-import { SEGMENTS, SEG_META, LEGACY, SEG_SOURCING, railTotal } from "./data.js";
+import { SEGMENTS, SEG_META, LEGACY, SEG_SOURCING } from "./data.js";
 
 const money = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x || 0);
 const money2 = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(x || 0);
 const num = (x) => new Intl.NumberFormat("en-US").format(Math.round(x || 0));
+
+const RAIL_LABEL = { "Check": "Checks", "Wire": "Wires", "Same-Day ACH": "Same-Day ACH", "ACH": "Standard ACH" };
 
 function Tag({ status }) {
   const cls = status === "Cited" ? "tag cited" : status === "Estimate" ? "tag est" : status === "Derived" ? "tag derived" : "tag partly";
@@ -25,18 +23,17 @@ export default function SegmentBreakdown({ result, segCosts, volBySeg }) {
   return (
     <section className="segwrap">
       <div className="seghead">
-        <h3>Where the savings come from — by customer segment</h3>
+        <h3>Savings by customer segment</h3>
         <p>
-          Each segment is costed on its own stack and aggregated. This replaces the flat per-rail cost, which charged a
-          consumer ACH and a commercial wire the same internal cost.
+          Retail, business and internal payments carry different internal costs for the same rail, so each is costed on its
+          own stack and then aggregated.
           {total > 0 && top && (
-            <> Biggest contributor: <b style={{ color: SEG_META[top].color }}>{SEG_META[top].label}</b> at{" "}
-              <b>{money(result.segments[top].gross)}</b>/yr ({Math.round((result.segments[top].gross / total) * 100)}% of gross).</>
+            <> Largest contributor: <b style={{ color: SEG_META[top].color }}>{SEG_META[top].label}</b> at{" "}
+              <b>{money(result.segments[top].gross)}</b> per year — {Math.round((result.segments[top].gross / total) * 100)}% of gross savings.</>
           )}
         </p>
       </div>
 
-      {/* contribution bar */}
       {total > 0 && (
         <div className="segbar" role="img" aria-label="Share of gross savings by segment">
           {ordered.map((s) => {
@@ -60,10 +57,11 @@ export default function SegmentBreakdown({ result, segCosts, volBySeg }) {
           const meta = SEG_META[seg];
           const vols = volBySeg[seg] || {};
           const totVol = LEGACY.reduce((a, r) => a + (vols[r] || 0), 0);
+          const totMig = s.rows.reduce((a, r) => a + r.migrated, 0);
           return (
             <div className="segcard" key={seg} style={{ borderTopColor: meta.color }}>
               <div className="segcardhead">
-                <div>
+                <div className="segcardid">
                   <h4 style={{ color: meta.color }}>{meta.label}</h4>
                   <span className="segshort">{meta.short}</span>
                 </div>
@@ -72,42 +70,62 @@ export default function SegmentBreakdown({ result, segCosts, volBySeg }) {
                   <span>gross / yr</span>
                 </div>
               </div>
-              <p className="segblurb">{meta.blurb}</p>
 
               <div className="segstats">
                 <div><span>Outbound volume</span><b>{num(totVol)}</b></div>
-                <div><span>Instant cost / txn</span><b>{money2(s.instant)}</b></div>
+                <div><span>Migrating</span><b>{num(totMig)}</b></div>
+                <div><span>Instant $/txn</span><b>{money2(s.instant)}</b></div>
               </div>
 
-              <table className="segtable">
-                <thead>
-                  <tr><th>Rail</th><th>Cost / txn</th><th>Shift</th><th>Migrated</th><th>Savings / yr</th></tr>
-                </thead>
-                <tbody>
-                  {s.rows.map((r) => {
-                    const src = SEG_SOURCING[seg]?.[r.rail];
-                    return (
-                      <tr key={r.rail} className={r.ann < 0 ? "neg" : ""}>
-                        <td>
-                          {r.rail}
-                          {src && <Tag status={src.status} />}
-                        </td>
-                        <td title={src?.basis}>{money2(r.legacy)}</td>
-                        <td>{r.pct}%</td>
-                        <td>{num(r.migrated)}</td>
-                        <td className={r.ann < 0 ? "negval" : ""}>
-                          {r.ann < 0 ? "−" : ""}{money(Math.abs(r.ann))}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="tablewrap">
+                <table className="dtbl segtable">
+                  <colgroup>
+                    <col style={{ width: "34%" }} /><col /><col /><col /><col />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th scope="col">Rail</th>
+                      <th scope="col" className="n">Cost / txn</th>
+                      <th scope="col" className="n">Shift</th>
+                      <th scope="col" className="n">Migrated</th>
+                      <th scope="col" className="n">Savings / yr</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.rows.map((r) => {
+                      const src = SEG_SOURCING[seg]?.[r.rail];
+                      return (
+                        <tr key={r.rail} className={r.ann < 0 ? "neg" : ""}>
+                          <th scope="row">
+                            <span className="railname">{RAIL_LABEL[r.rail]}</span>
+                            {src && <Tag status={src.status} />}
+                          </th>
+                          <td className="n" title={src?.basis}>{money2(r.legacy)}</td>
+                          <td className="n">{r.pct}%</td>
+                          <td className="n">{num(r.migrated)}</td>
+                          <td className={"n" + (r.ann < 0 ? " negval" : "")}>
+                            {r.ann < 0 ? "−" : ""}{money(Math.abs(r.ann))}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">Total</th>
+                      <td className="n">—</td>
+                      <td className="n">—</td>
+                      <td className="n">{num(totMig)}</td>
+                      <td className="n">{money(s.gross)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
 
               {s.rows.some((r) => r.ann < 0) && (
                 <p className="segnote">
-                  Negative rows are rails where instant costs <b>more</b> than the rail you'd move off. Shifting those
-                  destroys value — keep them where they are.
+                  Negative rows are rails where instant costs <b>more</b> than the rail you would move off. Shifting those
+                  destroys value — leave them in place.
                 </p>
               )}
             </div>

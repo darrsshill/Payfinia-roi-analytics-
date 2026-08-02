@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, LabelList, Tooltip } from "recharts";
 import { RAIL_COLOR, LEGACY, runBottomUp, railTotal } from "./data.js";
+import { slug, exportScenario } from "./scenarios.js";
 import WhyMigrate from "./WhyMigrate.jsx";
 import SegmentBreakdown from "./SegmentBreakdown.jsx";
 
@@ -19,8 +20,6 @@ function CNum({ value, onChange }) {
       onBlur={() => setTxt(num(value))} />
   );
 }
-
-const slug = (s) => (s || "institution").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "institution";
 
 export default function ClientResult({
   vol, setVolRail, costs, subst, mig, setMig, overrides, oneTime, annual, disc, horizon,
@@ -273,6 +272,7 @@ export default function ClientResult({
                     <div className="cvernet">{money(s.result.net)}<span>/yr</span></div>
                     <div className="cverbtns">
                       <button className="minibtn" onClick={() => onLoadScenario(s)}>Load</button>
+                      <button className="minibtn" onClick={() => exportScenario(s)}>Export ↓</button>
                       <button className="minibtn danger" onClick={() => onDeleteScenario(s.id)} aria-label="Delete scenario">✕</button>
                     </div>
                   </div>

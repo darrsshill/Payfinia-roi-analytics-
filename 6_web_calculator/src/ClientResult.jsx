@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, LabelList, Tooltip } from "recharts";
 import { RAIL_COLOR, LEGACY, runBottomUp, railTotal } from "./data.js";
+import { slug, exportScenario } from "./scenarios.js";
 import WhyMigrate from "./WhyMigrate.jsx";
 import SegmentBreakdown from "./SegmentBreakdown.jsx";
 
@@ -44,6 +45,46 @@ export default function ClientResult({
     setScName(""); setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2200);
   }
+
+  function doExport() {
+    const payload = {
+      institution: bankName || null,
+      preparedFor: userName || null,
+      exportedAt: new Date().toISOString(),
+      inputs: {
+        outboundVolumeAnnual: vol,
+        shareMovingToInstantPct: mig,
+        oneTimeSetupCost: oneTime,
+        annualPlatformCost: annual,
+        discountRatePct: disc,
+        horizonYears: horizon,
+      },
+      results: {
+        netAnnualSavings: res.net,
+        grossAnnualSavings: res.gross,
+        firstYearRoiPct: Math.round(res.roi * 100),
+        paybackMonths: res.payback === Infinity ? null : +res.payback.toFixed(1),
+        fiveYearValue: res.npv,
+        instantCostPerTxn: res.instant,
+        byRail: res.rows.map((r) => ({
+          rail: RAIL_LABEL[r.rail] || r.rail,
+          costPerTxn: r.legacy,
+          savedPerTxn: r.per,
+          paymentsMigrated: r.migrated,
+          annualSavings: r.ann,
+        })),
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payfinia-roi-${slug(bankName)}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
   const savings = res.rows
     .map((r) => ({ name: RAIL_LABEL[r.rail] || r.rail, value: Math.round(r.ann), color: RAIL_COLOR[r.rail] }))
     .filter((d) => d.value > 0)
@@ -61,6 +102,7 @@ export default function ClientResult({
           </div>
           <div className="cheadbtns">
             <button className="cghost" onClick={onRestart}>Start over</button>
+            <button className="cghost" onClick={doExport}>Export data ↓</button>
             <button className="cghost solid" onClick={onAdvanced}>Full model →</button>
           </div>
         </div>
@@ -230,6 +272,7 @@ export default function ClientResult({
                     <div className="cvernet">{money(s.result.net)}<span>/yr</span></div>
                     <div className="cverbtns">
                       <button className="minibtn" onClick={() => onLoadScenario(s)}>Load</button>
+                      <button className="minibtn" onClick={() => exportScenario(s)}>Export ↓</button>
                       <button className="minibtn danger" onClick={() => onDeleteScenario(s.id)} aria-label="Delete scenario">✕</button>
                     </div>
                   </div>

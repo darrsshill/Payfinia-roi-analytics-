@@ -46,3 +46,50 @@ export function makeScenario(name, snap) {
 export function addScenario(sc) { const list = loadScenarios(); list.unshift(sc); persist(list); return list; }
 export function removeScenario(id) { const list = loadScenarios().filter((s) => s.id !== id); persist(list); return list; }
 export function clearScenarios() { persist([]); return []; }
+
+// ---- export: turn saved scenarios into downloadable files ----
+export const slug = (s) => (s || "institution").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "institution";
+
+function scenarioToExport(s) {
+  return {
+    institution: s.bankName || null,
+    scenarioName: s.name,
+    savedAt: s.savedAt,
+    migrationSharePct: s.mig,
+    inputs: {
+      outboundVolumeAnnual: s.vol,
+      oneTimeSetupCost: s.oneTime,
+      annualPlatformCost: s.annual,
+      discountRatePct: s.disc,
+      horizonYears: s.horizon,
+    },
+    results: {
+      netAnnualSavings: s.result.net,
+      grossAnnualSavings: s.result.gross,
+      firstYearRoiPct: Math.round(s.result.roi * 100),
+      paybackMonths: s.result.payback,
+      fiveYearValue: s.result.npv,
+      instantCostPerTxn: s.result.instant,
+      byRail: s.result.rows,
+    },
+  };
+}
+
+function downloadJSON(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function exportScenario(s) {
+  const date = new Date().toISOString().slice(0, 10);
+  downloadJSON(`payfinia-roi-${slug(s.bankName)}-${slug(s.name)}-${date}.json`, scenarioToExport(s));
+}
+
+export function exportAllScenarios(scenarios) {
+  const date = new Date().toISOString().slice(0, 10);
+  downloadJSON(`payfinia-roi-scenarios-${date}.json`, scenarios.map(scenarioToExport));
+}

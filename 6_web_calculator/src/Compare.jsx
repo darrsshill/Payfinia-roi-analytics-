@@ -1,5 +1,6 @@
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, Tooltip } from "recharts";
 import { LEGACY, RAIL_COLOR } from "./data.js";
+import { exportScenario, exportAllScenarios } from "./scenarios.js";
 
 const money = (x) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
 
@@ -24,7 +25,10 @@ export default function Compare({ scenarios, onLoad, onDelete }) {
 
   return (
     <div className="datawrap">
-      <p className="lead">Every saved scenario, side by side. <b>Load</b> one back into the model to keep editing it.</p>
+      <div className="cardhead" style={{ marginBottom: 4 }}>
+        <p className="lead" style={{ margin: 0 }}>Every saved scenario, side by side. <b>Load</b> one back into the model to keep editing it.</p>
+        <button className="guidedbtn" onClick={() => exportAllScenarios(scenarios)}>Export all ↓</button>
+      </div>
 
       <div className="card">
         <div className="cardhead">
@@ -74,6 +78,7 @@ export default function Compare({ scenarios, onLoad, onDelete }) {
                     {LEGACY.map((r) => <td key={r} className={"n" + ((byRail[r] || 0) < 0 ? " negval" : "")}>{money(byRail[r] || 0)}</td>)}
                     <td className="n nowrap">
                       <button className="minibtn" onClick={() => onLoad(s)}>Load</button>{" "}
+                      <button className="minibtn" onClick={() => exportScenario(s)}>Export ↓</button>{" "}
                       <button className="minibtn danger" onClick={() => onDelete(s.id)} aria-label="Delete scenario">✕</button>
                     </td>
                   </tr>

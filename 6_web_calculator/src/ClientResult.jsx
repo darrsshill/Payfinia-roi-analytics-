@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, LabelList, Tooltip } from "recharts";
 import { RAIL_COLOR, LEGACY, runBottomUp, railTotal } from "./data.js";
-import { slug, exportScenario } from "./scenarios.js";
+import { exportScenario, exportCurrentResult } from "./scenarios.js";
 import WhyMigrate from "./WhyMigrate.jsx";
 import SegmentBreakdown from "./SegmentBreakdown.jsx";
 
@@ -47,43 +47,10 @@ export default function ClientResult({
   }
 
   function doExport() {
-    const payload = {
-      institution: bankName || null,
-      preparedFor: userName || null,
-      exportedAt: new Date().toISOString(),
-      inputs: {
-        outboundVolumeAnnual: vol,
-        shareMovingToInstantPct: mig,
-        oneTimeSetupCost: oneTime,
-        annualPlatformCost: annual,
-        discountRatePct: disc,
-        horizonYears: horizon,
-      },
-      results: {
-        netAnnualSavings: res.net,
-        grossAnnualSavings: res.gross,
-        firstYearRoiPct: Math.round(res.roi * 100),
-        paybackMonths: res.payback === Infinity ? null : +res.payback.toFixed(1),
-        fiveYearValue: res.npv,
-        instantCostPerTxn: res.instant,
-        byRail: res.rows.map((r) => ({
-          rail: RAIL_LABEL[r.rail] || r.rail,
-          costPerTxn: r.legacy,
-          savedPerTxn: r.per,
-          paymentsMigrated: r.migrated,
-          annualSavings: r.ann,
-        })),
-      },
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payfinia-roi-${slug(bankName)}-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    exportCurrentResult({
+      bankName, userName, vol, mig, oneTime, annual, disc, horizon,
+      result: { ...res, payback: res.payback === Infinity ? null : res.payback },
+    });
   }
   const savings = res.rows
     .map((r) => ({ name: RAIL_LABEL[r.rail] || r.rail, value: Math.round(r.ann), color: RAIL_COLOR[r.rail] }))

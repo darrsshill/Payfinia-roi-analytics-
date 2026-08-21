@@ -15,7 +15,7 @@
 // a verify link, (b) DERIVED from one by an arithmetic rule stated in `basis`,
 // or (c) explicitly tagged "Estimate" as a calibration target. Nothing is
 // invented. See SEG_SOURCING below for the segment-level provenance notes.
-// Mirrors 2_roi_model/roi_model.py.
+// Mirrors roi-model/roi_model.py.
 // =====================================================================
 
 export const U = {

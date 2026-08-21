@@ -31,12 +31,12 @@ into decision-ready tools, mapped to the four deliverables in the project brief:
 
 | # | Deliverable | What it is | Folder |
 |---|-------------|------------|--------|
-| 1 | **Public Data Synthesis** | Sourced reference base of rail volumes, costs, fraud & global adoption | `1_data_synthesis/` |
-| 2 | **Migration ROI Model** | 3-layer full-cost model (Python + live Excel) quantifying migration savings | `2_roi_model/` |
-| 3 | **CFI Archetype Analysis** | Unsupervised ML (K-means + PCA) grouping banks into types mapped to ROI ranges | `6_archetype_analysis/` |
-| 4 | **Interactive ROI Calculator** | Client-facing guided web app + Streamlit twin | `5_web_calculator/`, `3_roi_calculator/` |
-| + | **Prospect Finder** *(go-to-market extension)* | Ranks all ~4,089 U.S. community banks into target segments, with outreach templates | `7_prospect_finder/` |
-| + | **Data-story Dashboard** | The "why instant payments win" narrative for stakeholders | `4_dashboard/` |
+| 1 | **Public Data Synthesis** | Sourced reference base of rail volumes, costs, fraud & global adoption | `data-synthesis/` |
+| 2 | **Migration ROI Model** | 3-layer full-cost model (Python + live Excel) quantifying migration savings | `roi-model/` |
+| 3 | **CFI Archetype Analysis** | Unsupervised ML (K-means + PCA) grouping banks into types mapped to ROI ranges | `archetype-analysis/` |
+| 4 | **Interactive ROI Calculator** | Client-facing guided web app + Streamlit twin | `web-calculator/`, `roi-calculator-streamlit/` |
+| + | **Prospect Finder** *(go-to-market extension)* | Ranks all ~4,089 U.S. community banks into target segments, with outreach templates | `prospect-finder/` |
+| + | **Data-story Dashboard** | The "why instant payments win" narrative for stakeholders | `dashboard/` |
 
 Every figure is sourced. Numbers that cannot be directly cited are labelled **Estimate** and
 flagged as calibration targets — nothing is fabricated.
@@ -74,15 +74,15 @@ flowchart TD
     end
 
     subgraph D4["4 · Client-facing calculators"]
-        WEB["5_web_calculator (React/Vite)<br/>Wizard &#8594; Client Result &#8594; Advanced view<br/>(Cost Builder, overrides, Compare, Why-Migrate)"]
-        ST["3_roi_calculator (Streamlit twin)"]
-        DASH["4_dashboard (Streamlit data story)"]
+        WEB["web-calculator (React/Vite)<br/>Wizard &#8594; Client Result &#8594; Advanced view<br/>(Cost Builder, overrides, Compare, Why-Migrate)"]
+        ST["roi-calculator-streamlit (Streamlit twin)"]
+        DASH["dashboard (Streamlit data story)"]
     end
 
     subgraph D5["Prospect Finder (go-to-market)"]
         PSCORE["scoring.py + cluster_prospects.py<br/>Segments A&#8594;D by $ opportunity"]
         PFILTER["filter_network_participants.py<br/>drop existing FedNow/RTP participants"]
-        PWEB["7_prospect_finder/web (React)"]
+        PWEB["prospect-finder/web (React)"]
         PST["prospect_finder_app.py (Streamlit)"]
         PEMAIL["PROSPECT_EMAIL_TEMPLATES.md<br/>segment-tailored outreach"]
     end
@@ -115,9 +115,9 @@ flowchart TD
 
 **Read it as three stages:**
 1. **Ingest & synthesize** — public regulator/industry stats and the live FDIC API feed a
-   sourced data layer (`1_data_synthesis/`) and the full bank universe (`7_prospect_finder/fetch_payfinia_banks.py`).
-2. **Model** — the ROI engine (`2_roi_model/roi_model.py`) is the single source of truth for
-   cost math; the archetype pipeline (`6_archetype_analysis/`) clusters banks so the model's
+   sourced data layer (`data-synthesis/`) and the full bank universe (`prospect-finder/fetch_payfinia_banks.py`).
+2. **Model** — the ROI engine (`roi-model/roi_model.py`) is the single source of truth for
+   cost math; the archetype pipeline (`archetype-analysis/`) clusters banks so the model's
    assumptions can be applied *per segment*, not just per example CFI.
 3. **Deliver** — the same ROI logic surfaces in two directions: a **calculator** a specific bank
    can self-serve (guided wizard → client result → advanced view), and a **prospect list** the
@@ -135,22 +135,22 @@ git clone https://github.com/darrsshill/Payfinia-roi-analytics-.git
 cd Payfinia-roi-analytics-
 
 # --- Interactive ROI calculator (React, primary client tool) ---
-cd 5_web_calculator && npm install && npm run dev        # http://localhost:5173
+cd web-calculator && npm install && npm run dev        # http://localhost:5173
 
 # --- ROI calculator (Streamlit twin) ---
-cd 3_roi_calculator && pip install -r requirements.txt && streamlit run roi_calculator.py
+cd roi-calculator-streamlit && pip install -r requirements.txt && streamlit run roi_calculator.py
 
 # --- Prospect Finder: pull all banks, segment, run ---
-cd 7_prospect_finder && pip install -r requirements.txt
+cd prospect-finder && pip install -r requirements.txt
 python fetch_payfinia_banks.py      # pulls ~4,089 banks from the FDIC API
 python cluster_prospects.py         # K-means segments + refreshes web data
 streamlit run prospect_finder_app.py
 
 # --- ROI model (prints results for 3 example CFIs) ---
-python 2_roi_model/roi_model.py
+python roi-model/roi_model.py
 
 # --- CFI archetype analysis (ML + charts) ---
-cd 6_archetype_analysis && pip install -r requirements.txt && python archetype_analysis.py
+cd archetype-analysis && pip install -r requirements.txt && python archetype_analysis.py
 ```
 
 ---
@@ -159,27 +159,28 @@ cd 6_archetype_analysis && pip install -r requirements.txt && python archetype_a
 
 ```
 Payfinia-ROI-Analytics/
-├── README.md                     ← you are here
-├── PROJECT_STATUS.md             ← current status & remaining work
-├── requirements.txt               ← Python deps (analysis + Streamlit apps)
+├── README.md                       ← you are here
+├── docs/
+│   └── PROJECT_STATUS.md           ← current status & remaining work
+├── requirements.txt                ← Python deps (analysis + Streamlit apps)
 ├── .gitignore
 │
-├── 1_data_synthesis/              # Deliverable 1 — the sourced data base
+├── data-synthesis/                 # Deliverable 1 — the sourced data base
 │   ├── Payfinia_Deliverable1_Public_Data_Synthesis.xlsx   (rail volumes, costs, fraud, global adoption; quality-rated)
 │   └── Payfinia_Deliverable1_Public_Data_Synthesis.docx   (written synthesis + data-quality assessment)
 │
-├── 2_roi_model/                   # Deliverable 2 — the migration ROI model
+├── roi-model/                      # Deliverable 2 — the migration ROI model
 │   ├── roi_model.py                                       (documented Python model — canonical logic)
 │   ├── Payfinia_Deliverable2_Migration_ROI_Model.xlsx      (live Excel model; edit inputs, results recalc)
 │   └── rail_unit_economics/                                (one PDF per rail: 8-component cost stack)
 │
-├── 3_roi_calculator/               # Deliverable 4 — Streamlit calculator twin
+├── roi-calculator-streamlit/       # Deliverable 4 — Streamlit calculator twin
 │   ├── roi_calculator.py · requirements.txt
 │
-├── 4_dashboard/                    # Data-story dashboard (the "why")
+├── dashboard/                      # Data-story dashboard (the "why")
 │   ├── app.py · requirements.txt · HOW_TO_RUN_DASHBOARD.md
 │
-├── 5_web_calculator/               # Deliverable 4 — React (Vite) calculator, primary client app
+├── web-calculator/                 # Deliverable 4 — React (Vite) calculator, primary client app
 │   ├── src/
 │   │   ├── Wizard.jsx              (guided 4-question intake)
 │   │   ├── ClientResult.jsx        (one-screen client-facing results view)
@@ -192,10 +193,10 @@ Payfinia-ROI-Analytics/
 │   ├── DATABASE_SETUP.md           (persistence design, in progress)
 │   └── package.json · vercel.json
 │
-├── 6_archetype_analysis/           # Deliverable 3 — unsupervised ML (K-means)
+├── archetype-analysis/             # Deliverable 3 — unsupervised ML (K-means)
 │   ├── archetype_analysis.py · data/fdic_cfi_sample.csv · outputs/ (charts + summary)
 │
-└── 7_prospect_finder/              # Prospect ranking — all ~4,089 banks segmented
+└── prospect-finder/                # Prospect ranking — all ~4,089 banks segmented
     ├── fetch_payfinia_banks.py     (FDIC API loader)
     ├── scoring.py                  (priority-score logic)
     ├── cluster_prospects.py        (K-means target segments A→D)
@@ -211,13 +212,13 @@ Payfinia-ROI-Analytics/
 
 ## 5. Component guide
 
-### 1 · Data Synthesis (`1_data_synthesis/`)
+### 1 · Data Synthesis (`data-synthesis/`)
 The reference base every model input traces back to. Open the `.xlsx` — six tabs cover rail
 volumes/value, per-transaction costs, fraud & operational benchmarks, international
 substitution (Pix, UK FPS), and a full sources + data-quality methodology. The `.docx` is the
 written version for a non-technical reviewer. No code to run.
 
-### 2 · ROI Model (`2_roi_model/`)
+### 2 · ROI Model (`roi-model/`)
 The engine. Each rail's cost is built from **8 components**, grouped into **3 layers** —
 network fee · provider (Payfinia/TPSP) fee · FI internal cost (staff, failures, fraud,
 compliance, reconciliation, liquidity). The model applies a substitution rate, computes savings
@@ -226,14 +227,14 @@ per migrated transaction, and rolls up to net benefit, ROI, payback, and 5-year 
 - The `.xlsx` is the same logic with live formulas (blue = inputs) so it recalculates as you edit.
 - `rail_unit_economics/` has a one-page cost breakdown PDF for each rail.
 
-### 3 · Interactive Calculator — Streamlit (`3_roi_calculator/`)
+### 3 · Interactive Calculator — Streamlit (`roi-calculator-streamlit/`)
 The same underlying model in Streamlit, for quick analyst-side use. `streamlit run roi_calculator.py`.
 
-### 4 · Data-story Dashboard (`4_dashboard/`)
+### 4 · Data-story Dashboard (`dashboard/`)
 The visual argument for instant payments (volumes, cost gap, momentum, fraud, international).
 `streamlit run app.py`.
 
-### 5 · Interactive Calculator — React (`5_web_calculator/`) *(primary, deployable)*
+### 5 · Interactive Calculator — React (`web-calculator/`) *(primary, deployable)*
 The client-facing tool, now a guided end-to-end flow:
 - **Wizard** — a short, TurboTax-style intake (name, size, checks/wires per year, migration %).
 - **Client Result** — one screen with the headline savings number, ROI, payback, and where the
@@ -249,16 +250,16 @@ The client-facing tool, now a guided end-to-end flow:
   "keep" — it's already cheaper than instant).
 - A guided **Savings Assistant** chat ties it together.
 
-`npm install && npm run dev`. **Deploy to Vercel:** set Root Directory to `5_web_calculator`,
+`npm install && npm run dev`. **Deploy to Vercel:** set Root Directory to `web-calculator`,
 framework Vite. See `USER_GUIDE.md` for the full walkthrough and `DATABASE_SETUP.md` for the
 in-progress persistence design.
 
-### 6 · CFI Archetype Analysis (`6_archetype_analysis/`)
+### 6 · CFI Archetype Analysis (`archetype-analysis/`)
 The unsupervised ML piece. `python archetype_analysis.py` pulls FDIC data, engineers features,
 runs K-means (k chosen with silhouette + elbow), visualizes clusters with PCA, and maps each
 archetype to an expected ROI range. Outputs charts + `archetype_roi_summary.csv`.
 
-### 7 · Prospect Finder (`7_prospect_finder/`)
+### 7 · Prospect Finder (`prospect-finder/`)
 Turns the analysis into a "call these first" tool across **all ~4,089** community banks.
 - `fetch_payfinia_banks.py` — pulls the full universe from the FDIC API (with names).
 - `cluster_prospects.py` — K-means into four target **segments (A→D)** and refreshes web data.
@@ -310,22 +311,22 @@ flagged as the numbers to calibrate with Payfinia production data. Nothing is fa
 
 ```bash
 # 1. ROI model results
-python 2_roi_model/roi_model.py
+python roi-model/roi_model.py
 
 # 2. Archetype analysis (ML + charts)
-cd 6_archetype_analysis && pip install -r requirements.txt && python archetype_analysis.py && cd ..
+cd archetype-analysis && pip install -r requirements.txt && python archetype_analysis.py && cd ..
 
 # 3. Prospect universe + segmentation
-cd 7_prospect_finder && pip install -r requirements.txt
+cd prospect-finder && pip install -r requirements.txt
 python fetch_payfinia_banks.py            # live FDIC pull (~4,089 banks)
 python cluster_prospects.py               # K-means segments + writes web/src/prospects.json
 python filter_network_participants.py     # (optional) drop existing FedNow/RTP participants
 cd ..
 
 # 4. Run the client tools
-cd 5_web_calculator && npm install && npm run dev        # calculator
+cd web-calculator && npm install && npm run dev        # calculator
 # (new terminal)
-cd 7_prospect_finder/web && npm install && npm run dev   # prospect finder
+cd prospect-finder/web && npm install && npm run dev   # prospect finder
 ```
 
 ---

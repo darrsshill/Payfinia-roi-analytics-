@@ -9,11 +9,11 @@
 
 | Deliverable | Status | Location |
 |---|---|---|
-| 1 · Public Data Synthesis | Complete | `1_data_synthesis/` (xlsx + docx) |
-| 2 · Migration ROI Model | Complete — carries the flat cost model, pending the v4 segment refactor | `2_roi_model/` (Python + live Excel + 5 rail PDFs) |
-| 3 · CFI Archetype Analysis (ML) | Complete | `6_archetype_analysis/` |
-| 4 · Interactive ROI Calculator | Complete — **v4, modular by customer segment** | `5_web_calculator/` (React) · `3_roi_calculator/` (Streamlit, still flat) |
-| Prospect Finder *(extension)* | Complete — deferred, not part of the core scope | `7_prospect_finder/` |
+| 1 · Public Data Synthesis | Complete | `data-synthesis/` (xlsx + docx) |
+| 2 · Migration ROI Model | Complete — carries the flat cost model, pending the v4 segment refactor | `roi-model/` (Python + live Excel + 5 rail PDFs) |
+| 3 · CFI Archetype Analysis (ML) | Complete | `archetype-analysis/` |
+| 4 · Interactive ROI Calculator | Complete — **v4, modular by customer segment** | `web-calculator/` (React) · `roi-calculator-streamlit/` (Streamlit, still flat) |
+| Prospect Finder *(extension)* | Complete — deferred, not part of the core scope | `prospect-finder/` |
 | Production-data calibration | Pending — requires Payfinia production data | — |
 
 All four brief deliverables are built and functional. The React calculator has been refactored so
@@ -21,9 +21,9 @@ that Retail, Business and Internal volume are costed independently and aggregate
 production-data calibration, propagating the segment refactor to the Python/Excel/Streamlit twins,
 and the deferred API-ingestion work.
 
-> **Two open methodology flags** are carried in `5_web_calculator/src/data.js` (`METHOD_FLAGS`) and
+> **Two open methodology flags** are carried in `web-calculator/src/data.js` (`METHOD_FLAGS`) and
 > displayed in the application. Both should be resolved before the calculator is used in a
-> customer-facing setting — see `5_web_calculator/CHANGELOG_v4.md` §6.
+> customer-facing setting — see `web-calculator/CHANGELOG_v4.md` §6.
 
 ---
 
@@ -84,8 +84,8 @@ highest ROI.
   are the single largest accuracy lever and the main open item.
 - **Resolve the two high-severity methodology flags:** the measurement-basis mismatch between the
   Retail and Business columns, and the retail wire cost currently exceeding the business wire cost.
-  See `5_web_calculator/CHANGELOG_v4.md` §6.
-- **Propagate the segment refactor** to `2_roi_model/roi_model.py`, the Excel model and the Streamlit
+  See `web-calculator/CHANGELOG_v4.md` §6.
+- **Propagate the segment refactor** to `roi-model/roi_model.py`, the Excel model and the Streamlit
   twin. These still carry the flat model and no longer agree with the React application.
 
 **Planned enhancements**
@@ -96,7 +96,7 @@ highest ROI.
 - **Origination logic** — deepen the ACH-shrinking model, specifically the credit-push share that can
   move to instant.
 - **Input persistence** — a database layer to store calculator inputs across sessions; design is
-  documented in `5_web_calculator/DATABASE_SETUP.md`.
+  documented in `web-calculator/DATABASE_SETUP.md`.
 - **Deployment** — publish the React calculator and prospect finder to Vercel for shareable links.
 
 **Polish**

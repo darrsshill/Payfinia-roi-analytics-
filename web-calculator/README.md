@@ -21,7 +21,7 @@ This app lives in a subfolder of the main repo, so tell Vercel where it is:
 
 1. Push the repo to GitHub.
 2. vercel.com -> Add New... -> Project -> import your GitHub repo.
-3. Set **Root Directory** to `5_web_calculator`.
+3. Set **Root Directory** to `web-calculator`.
 4. Framework preset: **Vite** (auto-detected). Build `npm run build`, output `dist`.
 5. Deploy. Vercel gives you a live shareable URL.
 

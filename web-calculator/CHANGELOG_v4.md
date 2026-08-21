@@ -176,5 +176,5 @@ npm run test:render
 - **API-first ingestion (CSV/JSON)** — not yet built.
 - **Call-report defaults** — pull NCUA/FDIC fields into the calculator directly.
 - **Database persistence** — design documented in `DATABASE_SETUP.md`, not yet implemented.
-- **Streamlit twin** (`3_roi_calculator/`) and `2_roi_model/roi_model.py` still carry the **flat**
+- **Streamlit twin** (`roi-calculator-streamlit/`) and `roi-model/roi_model.py` still carry the **flat**
   model and no longer agree with the React application. They need the same refactor.

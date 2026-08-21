@@ -63,7 +63,7 @@ npm install
 npm run dev        # local
 npm run build      # production build in dist/
 ```
-On Vercel, set **Root Directory** to `7_prospect_finder/web`.
+On Vercel, set **Root Directory** to `prospect-finder/web`.
 Note: after refreshing the CSV, regenerate the web data with
 `python -c "import pandas as pd; pd.read_csv('data/payfinia_bank_prospects.csv').to_json('web/src/prospects.json', orient='records')"`.
 
@@ -71,7 +71,7 @@ Note: after refreshing the CSV, regenerate the web data with
 
 ## Files
 ```
-7_prospect_finder/
+prospect-finder/
 ├── fetch_payfinia_banks.py     # loader — pulls all ~4,089 banks & scores them
 ├── scoring.py                  # the Priority-Score logic (shared)
 ├── prospect_finder_app.py      # Streamlit prospect finder

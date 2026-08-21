@@ -69,7 +69,7 @@ Dashboard → **Project Settings → API**. Copy:
 
 ## Step 4 — Add them to the app
 
-Create `6_web_calculator/.env` (Vite reads variables prefixed with `VITE_`):
+Create `5_web_calculator/.env` (Vite reads variables prefixed with `VITE_`):
 
 ```
 VITE_SUPABASE_URL=https://abcd1234.supabase.co
@@ -82,7 +82,7 @@ Environment Variables**, add the same two so the deployed site has them.
 Install the client:
 
 ```bash
-cd 6_web_calculator
+cd 5_web_calculator
 npm install @supabase/supabase-js
 ```
 

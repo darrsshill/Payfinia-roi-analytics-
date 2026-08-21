@@ -66,7 +66,7 @@ export default function App() {
   const [disc, setDisc] = useState(SAVED?.disc ?? 10);
   const [horizon, setHorizon] = useState(SAVED?.horizon ?? 5);
 
-  // ---- MODULAR SEGMENT STATE (Nizar Jamal, 2026-07-28) ----
+  // ---- MODULAR SEGMENT STATE ----
   // Retail · Business · Internal are each costed independently, then aggregated.
   const [segCosts, setSegCosts] = useState(() => SAVED?.segCosts || clone(DEFAULT_SEG_COSTS));
   const [mix, setMix] = useState(() => SAVED?.mix || clone(SEG_MIX_DEFAULT));
@@ -89,7 +89,7 @@ export default function App() {
   const [flagsOpen, setFlagsOpen] = useState(false);
   const [uiScale, setUiScale] = useState(SAVED?.uiScale ?? 1);
 
-  // Kiran Garimella: app-wide text size. Scales the whole shell proportionally.
+  // App-wide text size. Scales the whole shell proportionally.
   useEffect(() => {
     try { document.documentElement.style.setProperty("--ui-scale", String(uiScale)); } catch { /* ignore */ }
   }, [uiScale]);
@@ -296,7 +296,7 @@ export default function App() {
   if (simple && stage === "wizard") return <Wizard onComplete={finishWizard} onSkip={() => setSimple(false)} />;
   if (simple) return (
     // The control panel is mounted alongside the client result so a mistyped
-    // input is never a dead end (Nizar Jamal, 2026-07-28).
+    // input can always be corrected in place.
     <div className={"shell" + (panelOpen ? " withpanel" : "")}>
       <ControlPanel {...panelProps} />
       <div className="shellmain">
@@ -728,10 +728,9 @@ function Assumptions({ segCosts, setComp, volBySeg, overrides, setOverride, appl
   const src = SEG_SOURCING[seg]?.[rail];
 
   // mini-calc local inputs.
-  // Nizar Jamal, 2026-07-28: the FTE model "uses basic counts and labor costs
-  // but fails to adequately reflect the fraction of time spent on specific
-  // payment rails — such as same-day ACH versus instant payments". pctTime is
-  // that missing factor; `loaded` applies a benefits/overhead multiplier.
+  // A headcount-and-salary model alone does not capture the fraction of time
+  // staff spend on a specific rail — e.g. Same-Day ACH versus instant payments.
+  // pctTime supplies that factor; `loaded` applies a benefits/overhead multiplier.
   const [fte, setFte] = useState(2), [salary, setSalary] = useState(55000);
   const [pctTime, setPctTime] = useState(25), [loaded, setLoaded] = useState(true);
   const [items, setItems] = useState(Math.round(segVol[rail] || 100000));

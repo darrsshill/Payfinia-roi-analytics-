@@ -16,7 +16,7 @@ This is the same official data regulators and analysts use.
 Source: https://banks.data.fdic.gov/bankfind-suite/
 
 **Step 2 — Score each bank (Priority Score).**
-For every bank we run the Deliverable-2 ROI model on *its own* size to estimate
+For every bank the tool runs the Deliverable-2 ROI model on *its own* size to estimate
 the **net annual benefit** it would get from migrating (its "Priority Score").
 Bigger volume → bigger dollar savings → higher priority.
 
@@ -31,7 +31,7 @@ export a "call these first" CSV.
 
 ---
 
-## What's real vs. estimated (say this to keep it defensible)
+## What is real vs. estimated
 - **REAL:** every bank's name, state, assets, deposits, offices, income — direct
   from the FDIC API.
 - **ESTIMATED:** each bank's exact payment-rail mix (checks vs. wires vs. ACH) —
@@ -63,7 +63,7 @@ npm install
 npm run dev        # local
 npm run build      # production build in dist/
 ```
-On Vercel, set **Root Directory** to `8_prospect_finder/web`.
+On Vercel, set **Root Directory** to `7_prospect_finder/web`.
 Note: after refreshing the CSV, regenerate the web data with
 `python -c "import pandas as pd; pd.read_csv('data/payfinia_bank_prospects.csv').to_json('web/src/prospects.json', orient='records')"`.
 
@@ -71,7 +71,7 @@ Note: after refreshing the CSV, regenerate the web data with
 
 ## Files
 ```
-8_prospect_finder/
+7_prospect_finder/
 ├── fetch_payfinia_banks.py     # loader — pulls all ~4,089 banks & scores them
 ├── scoring.py                  # the Priority-Score logic (shared)
 ├── prospect_finder_app.py      # Streamlit prospect finder

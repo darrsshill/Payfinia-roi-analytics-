@@ -38,10 +38,13 @@ describe("style coverage audit", () => {
     for (const l of ["Checks", "Wires", "Same-Day ACH", "Standard ACH"]) expect(html).toContain(l);
   });
 
-  it("no internal reviewer names leak into rendered output", () => {
+  // Guard against internal review notes, course attribution or developer
+  // placeholders reaching a customer-facing screen.
+  it("no internal attribution leaks into rendered output", () => {
+    const LEAKS = ["USF", "TODO", "FIXME", "internal review", "@gmail.com", "reviewer"];
     for (const [, render] of views) {
       const html = render();
-      for (const name of ["Nizar", "Keith", "Kiran", "USF ", "Justin"]) expect(html).not.toContain(name);
+      for (const token of LEAKS) expect(html).not.toContain(token);
     }
   });
 

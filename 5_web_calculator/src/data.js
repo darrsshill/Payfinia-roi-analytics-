@@ -1,6 +1,6 @@
 // =====================================================================
 // Payfinia ROI Calculator — sourced data + shared model logic
-// v4 — client feedback (Keith Riddle & Nizar Jamal, meeting 2026-07-28):
+// v4 — segmented cost model:
 //   • Cost is MODULAR BY CUSTOMER SEGMENT: Retail · Business · Internal (FI).
 //     Each segment is costed independently, then aggregated. This replaces
 //     the single flat cost per rail, which understated B2B cost badly.
@@ -45,8 +45,8 @@ export const RAILS = ["Check", "Wire", "Same-Day ACH", "ACH", "Instant"];
 export const LEGACY = ["Check", "Wire", "Same-Day ACH", "ACH"];
 
 // ---------------------------------------------------------------------
-// SEGMENTS — Keith Riddle & Nizar Jamal, 2026-07-28. The internal workflow
-// and cost for the same rail differ materially by who the payment is for.
+// SEGMENTS — the internal workflow and cost for the same rail differ
+// materially depending on who the payment is for.
 // ---------------------------------------------------------------------
 export const SEGMENTS = ["Retail", "Business", "Internal"];
 
@@ -168,8 +168,8 @@ export const SEG_SOURCING = {
 };
 
 // ---------------------------------------------------------------------
-// OPEN METHODOLOGY FLAGS — surfaced in the UI rather than quietly resolved.
-// These are for Nizar's cost-component review (action item, 2026-07-28).
+// OPEN METHODOLOGY FLAGS — surfaced in the UI rather than quietly resolved,
+// so that a reviewer sees the known limits of the cost components.
 // ---------------------------------------------------------------------
 export const METHOD_FLAGS = [
   {
@@ -233,7 +233,7 @@ export const COMP_FIELDS = [
 
 // ---------------------------------------------------------------------
 // VOLUME MIX — how outbound volume on each rail splits across segments.
-// Keith Riddle: intake should ask for segment counts, not just raw rail counts.
+// Intake asks for segment counts rather than only raw per-rail counts.
 // ---------------------------------------------------------------------
 export const SEG_MIX_DEFAULT = {
   "Check":        { Retail: 35, Business: 60, Internal: 5 },
@@ -275,7 +275,7 @@ export const APPETITE = {
 export const SUBST_DEFAULT = APPETITE["Moderate"];
 
 // Volumes are ANNUAL, outbound (originated) counts — what the FI controls.
-// customerMix = the segment-count intake Keith asked for.
+// customerMix = the segment-count intake collected by the wizard.
 export const PRESETS = {
   "Small CFI (~$200M)": {
     label: "Small (~$200M assets)",
@@ -432,9 +432,9 @@ export function splitVolume(vol, mix) {
 }
 
 // ---------------------------------------------------------------------
-// THE MODULAR ENGINE — Nizar Jamal's ask. Each segment is costed on its own
-// and the results are aggregated. Per-segment output is kept so the UI can
-// show which customer segment the savings actually come from.
+// THE MODULAR ENGINE — each segment is costed on its own and the results are
+// aggregated. Per-segment output is kept so the UI can show which customer
+// segment the savings actually come from.
 //
 //   volBySeg   { Retail: {Check: n, ...}, Business: {...}, Internal: {...} }
 //   costsBySeg { Retail: {Check: {...components}, ...}, ... }
@@ -514,8 +514,8 @@ export function impliedTotalCost(vol, costs, ov) {
 
 // ---------------------------------------------------------------------
 // Mini-calculator helpers — build a component from figures a bank has.
-// Nizar Jamal: FTE cost must reflect the SHARE OF TIME on this rail, not
-// just headcount x salary / volume.
+// FTE cost must reflect the SHARE OF TIME spent on this rail, not simply
+// headcount x salary / volume.
 // ---------------------------------------------------------------------
 export const LOADED_SALARY_MULT = 1.30;   // salary + benefits/overhead. FFIEC-style loading.
 
@@ -536,7 +536,7 @@ export function perItem(totalUsd, items) {
   return !n || n <= 0 ? 0 : Number(totalUsd) / n;
 }
 
-// Derive a segment volume mix from the customer counts Keith asked for.
+// Derive a segment volume mix from the customer counts collected at intake.
 // Weights are relative origination intensity per customer type per rail —
 // Estimate, exposed so it can be replaced with call-report data later.
 export const ORIGINATION_WEIGHTS = {

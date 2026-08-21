@@ -1,7 +1,7 @@
 # Prospect Outreach Email Templates
 
 Templated emails for Payfinia sales, keyed to the **segment** each bank falls into from the
-Prospect Finder. Every `{{placeholder}}` is a column you already have in
+Prospect Finder. Every `{{placeholder}}` maps to a column in
 `data/payfinia_bank_prospects.csv` — merge them in.
 
 **Golden rules**
